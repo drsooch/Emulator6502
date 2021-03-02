@@ -1,0 +1,61 @@
+name:                emulator6502
+version:             0.1.0.0
+github:              "drsooch/emulator6502"
+license:             BSD3
+author:              "Nick Suchecki"
+maintainer:          "nicksuchecki@gmail.com"
+copyright:           "None"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+description:         Please see the README on GitHub at <https://github.com/drsooch/emulator6502#readme>
+
+
+dependencies:
+- base >= 4.7 && < 5
+- array
+- mtl
+- generic-lens
+- microlens
+- microlens-mtl
+
+default-extensions:
+- RecordWildCards
+- LambdaCase
+- DerivingStrategies
+- GeneralizedNewtypeDeriving
+- DerivingVia
+- DeriveGeneric
+- TypeApplications
+- OverloadedLabels
+- DataKinds
+- AllowAmbiguousTypes
+
+library:
+  source-dirs: src
+
+executables:
+  emulator6502-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - emulator6502
+
+tests:
+  emulator6502-test:
+    main:                Test.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - emulator6502
+    - tasty
+    - tasty-hunit
