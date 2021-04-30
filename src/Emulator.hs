@@ -8,10 +8,10 @@ module Emulator
     , StackPointer(..)
     , Register(..)
     , Flags(..)
-    , OperandType(..)
-    , ResultLocation(..)
+    , Operand(..)
     , CPU(..)
     , CPUState(..)
+    , CPUErrorType(..)
     ,
     -- Constructors
       mkCPU
@@ -38,7 +38,6 @@ import           Data.Word                      ( Word16
                                                 )
 import           GHC.Generics                   ( Generic )
 import           Lens.Micro.Mtl
-import           Numeric                        ( showHex )
 
 -- | Notes on 6502 emulator:
 -- | Memory is 64Kb
@@ -89,35 +88,23 @@ type Emulator = RWST [String] [String] CPU IO
 type Memory = UArray Address Byte
 
 newtype ProgramCounter = PC {getPC :: Address}
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Show)
   deriving (Num) via Word16
-
-instance Show ProgramCounter where
-    show (PC val) = showHex val ""
 
 newtype StackPointer = SP {getSP :: Address}
-  deriving stock (Eq, Generic)
+  deriving stock (Eq, Generic, Show)
   deriving (Num) via Word16
 
-instance Show StackPointer where
-    show (SP val) = showHex val ""
-
 newtype Register = Reg {getReg :: Byte}
-  deriving stock (Eq, Generic)
+  deriving stock (Eq, Generic, Show)
   deriving (Num, Bits) via Word8
-
-instance Show Register where
-    show (Reg val) = showHex val ""
 
 newtype Flags = Flags {getFlags :: Byte}
-  deriving stock (Eq, Generic)
+  deriving stock (Eq, Generic, Show)
   deriving (Num, Bits) via Word8
 
-instance Show Flags where
-    show (Flags val) = showHex val ""
-
 -- Where the operand of instruction comes from
-data OperandType
+data Operand
   = OpTXReg
   | OpTYReg
   | OpTAReg
@@ -128,23 +115,16 @@ data OperandType
   | OpTValue Byte
   deriving (Eq, Show)
 
--- Where the result of operation goes
-data ResultLocation
-  = RLocXReg
-  | RLocYReg
-  | RLocAReg
-  | RLocFReg
-  | RLocPC
-  | RLocStack
-  | RLocMemory Address
-  deriving (Eq, Show)
-
 -- State of the Underlying CPU
 data CPUState
   = Running
   | Stopped
-  | CPUError String
+  | CPUError CPUErrorType
   deriving (Eq, Show)
+
+data CPUErrorType = StackOverflow
+                  | StackUnderflow
+                  deriving(Eq, Show)
 
 data CPU = CPU
     { -- Memory of 6502 - 64Kb

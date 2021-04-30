@@ -5,18 +5,15 @@ module LoadStoreTest
 import           Control.Monad.RWS.Strict       ( gets
                                                 , runRWST
                                                 )
-import           Data.Array.IArray              ( (//)
-                                                , listArray
-                                                )
+import           Data.Array.IArray              ( (//) )
+import qualified Data.Array.IArray             as IA
 import           Data.Bits                      ( Bits((.&.), (.|.)) )
-import           Emulator                       ( Byte
+import           Emulator                       ( Address
+                                                , Byte
                                                 , CPU(..)
                                                 , Emulator
                                                 , Flags(..)
-                                                , Memory
-                                                , ProgramCounter(PC)
                                                 , Register(Reg)
-                                                , StackPointer(SP)
                                                 , setMemory
                                                 )
 import           Execution                      ( execute )
@@ -29,30 +26,20 @@ import           Test.Tasty                     ( TestTree
 import           Test.Tasty.HUnit               ( (@=?)
                                                 , testCase
                                                 )
-
--- Testing CPU with default values initialized
-mkTestCPU :: CPU
-mkTestCPU = CPU { .. }
-  where
-    mem    = listArray (0, 0xFFFF) (repeat 0) -- Array of 64kb init to 0
-    memory = setTestZeroPage mem
-    pc     = PC 0xF000
-    sp     = SP 0x01FF
-    xReg   = Reg 0x0
-    yReg   = Reg 0x0
-    aReg   = Reg 0x0
-    fReg   = Flags 0x0
-
--- Set the ZeroPage to have useful information
-setTestZeroPage :: Memory -> Memory
-setTestZeroPage mem =
-    let zp = [ (ix, fromIntegral ix) | ix <- [0 .. 0xFF] ] in mem // zp
+import           TestUtils                      ( mkTestCPU )
 
 loadStore :: TestTree
 loadStore = testGroup
-    "LoadStore"
-    [loadARegTestGroup, loadXRegTestGroup, loadYRegTestGroup]
+    "LoadStore Operations"
+    [ loadARegTestGroup
+    , loadXRegTestGroup
+    , loadYRegTestGroup
+    , storeARegTestGroup
+    , storeXRegTestGroup
+    , storeYRegTestGroup
+    ]
 
+{-------------------------------------- TestGroups --------------------------------------}
 loadYRegTestGroup :: TestTree
 loadYRegTestGroup =
     testGroup "Loading Y Register"
@@ -72,6 +59,21 @@ loadARegTestGroup =
         <> [loadARegZeroPage, loadARegZeroPageXNoWrap, loadARegZeroPageXWrap]
         <> [loadARegAbsolute, loadARegAbsoluteX, loadARegAbsoluteY]
         <> [loadARegIndirectX, loadARegIndirectY]
+
+storeARegTestGroup :: TestTree
+storeARegTestGroup = testGroup
+    "Storing A Register"
+    [storeARegZeroPage, storeARegZeroPageX, storeARegAbsolute]
+
+storeXRegTestGroup :: TestTree
+storeXRegTestGroup = testGroup
+    "Storing X Register"
+    [storeXRegZeroPage, storeXRegZeroPageY, storeXRegAbsolute]
+
+storeYRegTestGroup :: TestTree
+storeYRegTestGroup = testGroup
+    "Storing Y Register"
+    [storeYRegZeroPage, storeYRegZeroPageX, storeYRegAbsolute]
 
 -- Execute a single Load instruction and check for proper output
 loadReg
@@ -210,7 +212,7 @@ loadXRegZeroPageY = loadXReg [0xB6, 0x7F]
                              0x8F
                              negFlag
                              cpu
-                             "Load X Register - ZeroPage - Y"
+                             "Load X Register - ZeroPageY"
     where cpu = mkTestCPU { yReg = Reg 0x10 }
 
 loadXRegAbsolute :: TestTree
@@ -225,7 +227,7 @@ loadXRegAbsoluteY = loadXReg [0xBE, 0x00, 0x30]
                              0x21
                              0x0
                              cpu'
-                             "Load X Register - Absolute - Y"
+                             "Load X Register - AbsoluteY"
   where
     cpu  = mkTestCPU { yReg = Reg 0xAA }
     mem  = memory cpu // [(0x30AA, 0x21)]
@@ -248,7 +250,7 @@ loadYRegZeroPageX = loadYReg [0xB4, 0x7F]
                              0x8F
                              negFlag
                              cpu
-                             "Load Y Register - ZeroPage - X"
+                             "Load Y Register - ZeroPageX"
     where cpu = mkTestCPU { xReg = Reg 0x10 }
 
 loadYRegAbsolute :: TestTree
@@ -263,7 +265,7 @@ loadYRegAbsoluteX = loadYReg [0xBC, 0x00, 0x30]
                              0x21
                              0x0
                              cpu'
-                             "Load Y Register - Absolute - X"
+                             "Load Y Register - AbsoluteX"
   where
     cpu  = mkTestCPU { xReg = Reg 0xAA }
     mem  = memory cpu // [(0x30AA, 0x21)]
@@ -272,3 +274,93 @@ loadYRegAbsoluteX = loadYReg [0xBC, 0x00, 0x30]
 
 
 {-------------------------------------- Store Tests --------------------------------------}
+
+storeReg
+    :: [Byte]            -- ^Program Instructions
+    -> Address           -- ^Address to store value
+    -> Byte              -- ^Expected Result in Memory
+    -> CPU               -- ^CPU with setup data
+    -> String            -- ^Test Name
+    -> TestTree
+storeReg bytes addr expect cpu name = testCase name $ do
+    (recv, _, _) <- runRWST (storeReg' addr bytes) [] cpu
+    expect @=? recv  -- Check Memory Loc for saved Register Value
+
+storeReg' :: Address -> [Byte] -> Emulator Byte
+storeReg' addr bytes =
+    setMemory 0xF000 bytes >> execute >> gets (\c -> memory c IA.! addr)
+
+{-------------------------------------- Store A Register --------------------------------------}
+storeARegZeroPage :: TestTree
+storeARegZeroPage = storeReg [0x85, 0xE1]
+                             0x00E1
+                             0x57
+                             cpu
+                             "Store A Register - ZeroPage"
+    where cpu = mkTestCPU { aReg = Reg 0x57 }
+
+storeARegZeroPageX :: TestTree
+storeARegZeroPageX = storeReg [0x95, 0xE1]
+                              0x00E2
+                              0x6A
+                              cpu
+                              "Store A Register - ZeroPageX"
+    where cpu = mkTestCPU { aReg = Reg 0x6A, xReg = 0x01 }
+
+storeARegAbsolute :: TestTree
+storeARegAbsolute = storeReg [0x8D, 0xAA, 0x57]
+                             0x57AA
+                             0x4B
+                             cpu
+                             "Store A Register - Absolute"
+    where cpu = mkTestCPU { aReg = Reg 0x4B }
+
+{-------------------------------------- Store X Register --------------------------------------}
+storeXRegZeroPage :: TestTree
+storeXRegZeroPage = storeReg [0x86, 0xE1]
+                             0x00E1
+                             0x57
+                             cpu
+                             "Store X Register - ZeroPage"
+    where cpu = mkTestCPU { xReg = Reg 0x57 }
+
+storeXRegZeroPageY :: TestTree
+storeXRegZeroPageY = storeReg [0x96, 0xE1]
+                              0x00E2
+                              0x6A
+                              cpu
+                              "Store X Register - ZeroPageY"
+    where cpu = mkTestCPU { xReg = Reg 0x6A, yReg = 0x01 }
+
+storeXRegAbsolute :: TestTree
+storeXRegAbsolute = storeReg [0x8E, 0xAA, 0x57]
+                             0x57AA
+                             0x4B
+                             cpu
+                             "Store X Register - Absolute"
+    where cpu = mkTestCPU { xReg = Reg 0x4B }
+
+{-------------------------------------- Store Y Register --------------------------------------}
+storeYRegZeroPage :: TestTree
+storeYRegZeroPage = storeReg [0x84, 0xE1]
+                             0x00E1
+                             0x57
+                             cpu
+                             "Store Y Register - ZeroPage"
+    where cpu = mkTestCPU { yReg = Reg 0x57 }
+
+storeYRegZeroPageX :: TestTree
+storeYRegZeroPageX = storeReg [0x94, 0xE1]
+                              0x00E2
+                              0x6A
+                              cpu
+                              "Store Y Register - ZeroPageX"
+    where cpu = mkTestCPU { yReg = Reg 0x6A, xReg = 0x01 }
+
+storeYRegAbsolute :: TestTree
+storeYRegAbsolute = storeReg [0x8C, 0xAA, 0x57]
+                             0x57AA
+                             0x4B
+                             cpu
+                             "Store Y Register - Absolute"
+    where cpu = mkTestCPU { yReg = Reg 0x4B }

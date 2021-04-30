@@ -4,8 +4,9 @@ module Flags
     ,
     -- functions
       updateFlag
-    , updateFlagM
-    , isNeg
+    , isFlagSet
+    , isNegative
+    , isOverflow
     ,
     -- Constants
       carryFlag
@@ -50,18 +51,39 @@ toBitRep = \case
     OF -> ovFlag
     NF -> negFlag
 
+toBitNum :: FlagType -> Int
+toBitNum = \case
+    CF -> 1
+    ZF -> 2
+    IF -> 3
+    DF -> 4
+    BF -> 5
+    OF -> 6
+    NF -> 7
+
+
 setFlag :: FlagType -> Flags -> Flags
 setFlag ft flags = flags .|. toBitRep ft
 
 clearFlag :: FlagType -> Flags -> Flags
 clearFlag ft flags = flags .&. complement (toBitRep ft)
 
-updateFlag :: Bool -> FlagType -> Flags -> Flags
-updateFlag True  = setFlag
-updateFlag False = clearFlag
+updateFlag :: Bool -> FlagType -> Emulator ()
+updateFlag bool ft = #fReg %= updateFlag' bool ft
 
-updateFlagM :: Bool -> FlagType -> Emulator ()
-updateFlagM bool ft = #fReg %= updateFlag bool ft
+updateFlag' :: Bool -> FlagType -> Flags -> Flags
+updateFlag' True  = setFlag
+updateFlag' False = clearFlag
 
-isNeg :: Byte -> Bool
-isNeg = flip testBit 7
+isFlagSet :: FlagType -> Emulator Bool
+isFlagSet fType =
+    use #fReg >>= \flags -> return $ isFlagSet' flags (toBitNum fType)
+
+isFlagSet' :: Flags -> Int -> Bool
+isFlagSet' = testBit
+
+isNegative :: Byte -> Bool
+isNegative val = isFlagSet' (Flags val) (toBitNum NF)
+
+isOverflow :: Byte -> Bool
+isOverflow val = isFlagSet' (Flags val) (toBitNum OF)

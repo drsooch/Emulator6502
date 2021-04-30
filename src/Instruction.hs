@@ -3,7 +3,7 @@ module Instruction
     , AddressType(..)
     , OpCode(..)
     , OpName(..)
-    , Operands(..)
+    , Operand(..)
     ,
     -- functions
       decodeOpCode
@@ -17,7 +17,7 @@ import           Emulator
 import           Text.Printf                    ( printf )
 
 -- We decode instructions into this form
-data Instruction = Instruction OpCode Operands
+data Instruction = Instruction OpCode Operand
     deriving Eq
 
 instance Show Instruction where
@@ -26,8 +26,8 @@ instance Show Instruction where
 
 -- 6502 has 8 distinct addressing modes
 data AddressType
-  = Accumulator ResultLocation
-  | Implicit ResultLocation
+  = Accumulator
+  | Implicit
   | Absolute
   | AbsoluteX
   | AbsoluteY
@@ -105,30 +105,27 @@ data OpName
 data OpCode = OpCode Byte OpName AddressType
     deriving (Eq, Show)
 
-data Operands = Operands [Byte] OperandType
-    deriving (Eq, Show)
-
 -- number of Bytes to get for addressing
 operandNum :: AddressType -> Int
-operandNum (Accumulator _) = 0
-operandNum Absolute        = 2
-operandNum AbsoluteX       = 2
-operandNum AbsoluteY       = 2
-operandNum Immediate       = 1
-operandNum (Implicit _)    = 0
-operandNum Indirect        = 2
-operandNum IndirectX       = 1
-operandNum IndirectY       = 1
-operandNum Relative        = 1
-operandNum ZeroPage        = 1
-operandNum ZeroPageX       = 1
-operandNum ZeroPageY       = 1
+operandNum Accumulator = 0
+operandNum Absolute    = 2
+operandNum AbsoluteX   = 2
+operandNum AbsoluteY   = 2
+operandNum Immediate   = 1
+operandNum Implicit    = 0
+operandNum Indirect    = 2
+operandNum IndirectX   = 1
+operandNum IndirectY   = 1
+operandNum Relative    = 1
+operandNum ZeroPage    = 1
+operandNum ZeroPageX   = 1
+operandNum ZeroPageY   = 1
 
 -- get the opcode from an instruction
 getOpCode :: Instruction -> OpCode
 getOpCode (Instruction opcode _) = opcode
 
-implicitOperand :: OpName -> OperandType
+implicitOperand :: OpName -> Operand
 implicitOperand TAX = OpTXReg
 implicitOperand TAY = OpTYReg
 implicitOperand TSX = OpTXReg
@@ -160,7 +157,7 @@ decodeOpCode b = case b of
     0x3D -> OpCode b AND AbsoluteX
     -- Arithmetic Shift Left
     0x06 -> OpCode b ASL ZeroPage
-    0x0A -> OpCode b ASL (Accumulator RLocAReg)
+    0x0A -> OpCode b ASL Accumulator
     0x0E -> OpCode b ASL Absolute
     0x16 -> OpCode b ASL ZeroPageX
     0x1E -> OpCode b ASL AbsoluteX
@@ -180,19 +177,19 @@ decodeOpCode b = case b of
     -- Branch if Not Equal
     0x10 -> OpCode b BPL Relative
     -- Force Interrupt
-    0x00 -> OpCode b BRK (Implicit (RLocMemory 0xFFFF))
+    0x00 -> OpCode b BRK Implicit
     -- Branch if Overflow Clear
     0x50 -> OpCode b BVC Relative
     -- Branch if Overflow Set
     0x70 -> OpCode b BVS Relative
     -- Clear Carry Flag
-    0x18 -> OpCode b CLC (Implicit RLocFReg)
+    0x18 -> OpCode b CLC Implicit
     -- Clear Decimal Mode
-    0xD8 -> OpCode b CLD (Implicit RLocFReg)
+    0xD8 -> OpCode b CLD Implicit
     -- Clear Interrupt Disable
-    0x58 -> OpCode b CLI (Implicit RLocFReg)
+    0x58 -> OpCode b CLI Implicit
     -- Clear Overflow Flag
-    0xB8 -> OpCode b CLV (Implicit RLocFReg)
+    0xB8 -> OpCode b CLV Implicit
     -- Compare
     0xC1 -> OpCode b CMP IndirectX
     0xC5 -> OpCode b CMP ZeroPage
@@ -216,9 +213,9 @@ decodeOpCode b = case b of
     0xD6 -> OpCode b DEC ZeroPageX
     0xDE -> OpCode b DEC AbsoluteX
     -- Decrement X Register
-    0xCA -> OpCode b DEX (Implicit RLocXReg)
+    0xCA -> OpCode b DEX Implicit
     -- Decrement Y Register
-    0x88 -> OpCode b DEY (Implicit RLocYReg)
+    0x88 -> OpCode b DEY Implicit
     -- Exclusive Or
     0x41 -> OpCode b EOR IndirectX
     0x45 -> OpCode b EOR ZeroPage
@@ -234,9 +231,9 @@ decodeOpCode b = case b of
     0xF6 -> OpCode b INC ZeroPageX
     0xFE -> OpCode b INC AbsoluteX
     -- Decrement X Register
-    0xE8 -> OpCode b INX (Implicit RLocXReg)
+    0xE8 -> OpCode b INX Implicit
     -- Decrement Y Register
-    0xC8 -> OpCode b INY (Implicit RLocYReg)
+    0xC8 -> OpCode b INY Implicit
     -- Jump
     0x4C -> OpCode b JMP Absolute
     0x6C -> OpCode b JMP Indirect
@@ -265,12 +262,12 @@ decodeOpCode b = case b of
     0xBC -> OpCode b LDY AbsoluteX
     -- Logical Shift Right
     0x46 -> OpCode b LSR ZeroPage
-    0x4A -> OpCode b LSR (Accumulator RLocAReg)
+    0x4A -> OpCode b LSR Accumulator
     0x4E -> OpCode b LSR Absolute
     0x56 -> OpCode b LSR ZeroPageX
     0x5E -> OpCode b LSR AbsoluteX
     -- No Operation
-    0x04 -> OpCode b NOP (Implicit RLocAReg) -- doesn't matter location
+    0x04 -> OpCode b NOP Implicit -- doesn't matter location
     -- Logical Inclusive Or
     0x01 -> OpCode b ORA IndirectX
     0x05 -> OpCode b ORA ZeroPage
@@ -281,29 +278,29 @@ decodeOpCode b = case b of
     0x19 -> OpCode b ORA AbsoluteY
     0x1D -> OpCode b ORA AbsoluteX
     -- Push Accumulator
-    0x48 -> OpCode b PHA (Implicit RLocStack)
+    0x48 -> OpCode b PHA Implicit
     -- Push Processor Status
-    0x08 -> OpCode b PHP (Implicit RLocStack)
+    0x08 -> OpCode b PHP Implicit
     -- Pull Accumulator
-    0x68 -> OpCode b PLA (Implicit RLocAReg)
+    0x68 -> OpCode b PLA Implicit
     -- Pull Processor Status
-    0x28 -> OpCode b PLP (Implicit RLocFReg)
+    0x28 -> OpCode b PLP Implicit
     -- Rotate Left
     0x26 -> OpCode b ROL ZeroPage
-    0x2A -> OpCode b ROL (Accumulator RLocAReg)
+    0x2A -> OpCode b ROL Accumulator
     0x2E -> OpCode b ROL Absolute
     0x36 -> OpCode b ROL ZeroPageX
     0x3E -> OpCode b ROL AbsoluteX
     -- Rotate Right
     0x66 -> OpCode b ROR ZeroPage
-    0x6A -> OpCode b ROR (Accumulator RLocAReg)
+    0x6A -> OpCode b ROR Accumulator
     0x6E -> OpCode b ROR Absolute
     0x76 -> OpCode b ROR ZeroPageX
     0x7E -> OpCode b ROR AbsoluteX
     -- Return from Interrupt
-    0x40 -> OpCode b RTI (Implicit RLocFReg)
+    0x40 -> OpCode b RTI Implicit
     -- Return from Subroutine
-    0x60 -> OpCode b RTS (Implicit RLocPC)
+    0x60 -> OpCode b RTS Implicit
     -- Subtract with Carry
     0xE1 -> OpCode b SBC IndirectX
     0xE5 -> OpCode b SBC ZeroPage
@@ -314,11 +311,11 @@ decodeOpCode b = case b of
     0xF9 -> OpCode b SBC AbsoluteY
     0xFD -> OpCode b SBC AbsoluteX
     -- Set Carry Flag
-    0x38 -> OpCode b SEC (Implicit RLocFReg)
+    0x38 -> OpCode b SEC Implicit
     -- Set Decimal Flag
-    0xF8 -> OpCode b SED (Implicit RLocFReg)
+    0xF8 -> OpCode b SED Implicit
     -- Set Interrupt Disable
-    0x78 -> OpCode b SEI (Implicit RLocFReg)
+    0x78 -> OpCode b SEI Implicit
     -- Store Accumulator
     0x81 -> OpCode b STA IndirectX
     0x85 -> OpCode b STA ZeroPage
@@ -334,17 +331,17 @@ decodeOpCode b = case b of
     -- Store Y Register
     0x84 -> OpCode b STY ZeroPage
     0x8C -> OpCode b STY Absolute
-    0x94 -> OpCode b STY ZeroPageY
+    0x94 -> OpCode b STY ZeroPageX
     -- Transfer Accumulator to X
-    0xAA -> OpCode b TAX (Implicit RLocXReg)
+    0xAA -> OpCode b TAX Implicit
     -- Transfer Accumulator to Y
-    0xA8 -> OpCode b TAY (Implicit RLocYReg)
+    0xA8 -> OpCode b TAY Implicit
     -- Transfer Stack Pointer to X
-    0xBA -> OpCode b TSX (Implicit RLocXReg)
+    0xBA -> OpCode b TSX Implicit
     -- Transfer X to Accumulator
-    0x8A -> OpCode b TXA (Implicit RLocAReg)
+    0x8A -> OpCode b TXA Implicit
     -- Transfer X to Stack Pointer
-    0x9A -> OpCode b TXS (Implicit RLocStack)
+    0x9A -> OpCode b TXS Implicit
     -- Transfer Y to Accumulator
-    0x98 -> OpCode b TYA (Implicit RLocAReg)
+    0x98 -> OpCode b TYA Implicit
     _    -> undefined

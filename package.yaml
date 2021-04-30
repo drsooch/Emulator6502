@@ -32,6 +32,8 @@ default-extensions:
 - OverloadedLabels
 - DataKinds
 - AllowAmbiguousTypes
+- MultiWayIf
+- StrictData
 
 library:
   source-dirs: src

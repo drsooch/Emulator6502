@@ -10,30 +10,36 @@ import           Control.Monad.RWS.Strict       ( MonadState(get)
                                                 )
 import           Control.Monad.State.Strict     ( gets )
 import qualified Data.Array.IArray             as IA
-import           Data.Bits                      ( shiftL )
+import           Data.Bits                      ( (.&.)
+                                                , (.|.)
+                                                , shiftL
+                                                , xor
+                                                )
 import           Data.Word                      ( )
 import           Emulator                       ( Address
                                                 , Byte
                                                 , CPU(..)
+                                                , CPUErrorType(..)
                                                 , CPUState(..)
                                                 , Emulator
                                                 , Flags(..)
-                                                , OperandType(..)
+                                                , Operand(..)
                                                 , ProgramCounter(..)
                                                 , Register(..)
-                                                , StackPointer(SP)
+                                                , StackPointer(SP, getSP)
                                                 , mkCPU
                                                 , setMemory
                                                 )
 import           Flags                          ( FlagType(..)
-                                                , isNeg
-                                                , updateFlagM
+                                                , decFlag
+                                                , isNegative
+                                                , isOverflow
+                                                , updateFlag
                                                 )
 import           Instruction                    ( AddressType(..)
                                                 , Instruction(..)
                                                 , OpCode(..)
                                                 , OpName(..)
-                                                , Operands(..)
                                                 , decodeOpCode
                                                 , implicitOperand
                                                 , operandNum
@@ -58,13 +64,13 @@ hardResetCPU _ = cpu { memory = mem' }
 -- softResetCPU CPU {..} = let c = mkCPU in c { memory = memory }
 
 runEmulator :: CPU -> IO ((), CPU, [String])
-runEmulator = runRWST execute []
+runEmulator = runRWST (void execute) []
 
-execute :: Emulator ()
-execute = decodeInstruction >>= void . executeInstruction
+execute :: Emulator CPUState
+execute = decodeInstruction >>= executeInstruction
 
 executeInstruction :: Instruction -> Emulator CPUState
-executeInstruction inst@(Instruction (OpCode _ opName _) _) = do
+executeInstruction inst@(Instruction (OpCode _ opName _) opt) = do
     CPU {..} <- get
     case opName of
         -- Load Ops
@@ -76,74 +82,49 @@ executeInstruction inst@(Instruction (OpCode _ opName _) _) = do
         STX -> executeStore inst
         STY -> executeStore inst
         -- Transfer Ops
-        TAX -> do
-            (Reg val) <- use #aReg
-            updateFlagM (val == 0)  ZF
-            updateFlagM (isNeg val) NF
-            #xReg .= Reg val
-            return Running
-        TAY -> do
-            (Reg val) <- use #aReg
-            updateFlagM (val == 0)  ZF
-            updateFlagM (isNeg val) NF
-            #yReg .= Reg val
-            return Running
-        TXA -> do
-            (Reg val) <- use #xReg
-            updateFlagM (val == 0)  ZF
-            updateFlagM (isNeg val) NF
-            #aReg .= Reg val
-            return Running
-        TYA -> do
-            (Reg val) <- use #yReg
-            updateFlagM (val == 0)  ZF
-            updateFlagM (isNeg val) NF
-            #aReg .= Reg val
-            return Running
+        TAX -> executeTransfer inst
+        TAY -> executeTransfer inst
+        TXA -> executeTransfer inst
+        TYA -> executeTransfer inst
         -- Stack Operations
         TSX -> do
-            (SP val) <- use #sp
-            updateFlagM (val == 0)                 ZF
-            updateFlagM (isNeg $ fromIntegral val) NF
+            val <- fromIntegral . getSP <$> use #sp
+            updateFlag (val == 0)       ZF
+            updateFlag (isNegative val) NF
             #xReg .= Reg (fromIntegral val)  -- NOTE: fromIntegral Word8 -> Word16 clears high bits (which is what we want)
             return Running
         TXS -> do
             (Reg val) <- use #xReg
             #sp .= SP (0x0100 + fromIntegral val)
             return Running
-        PHA -> do
-            (Reg val) <- use #aReg
-            pushStack val
-            sp' <- use #sp
-            if spInRange sp'
-                then return Running
-                else return (CPUError "Stack Overflow")
-        PHP -> do
-            (Flags val) <- use #fReg
-            pushStack val
-            sp' <- use #sp
-            if spInRange sp'
-                then return Running
-                else return (CPUError "Stack Overflow")
+        PHA -> use #aReg >>= pushStack . getReg >> spInRangeM
+        PHP -> use #fReg >>= pushStack . getFlags >> spInRangeM
         PLA -> do
             val <- popStack
             #aReg .= Reg val
-            updateFlagM (val == 0)                 ZF
-            updateFlagM (isNeg $ fromIntegral val) NF
-            sp' <- use #sp
-            if spInRange sp'
-                then return Running
-                else return (CPUError "Stack Underflow")
+            updateFlag (val == 0)       ZF
+            updateFlag (isNegative val) NF
+            spInRangeM
         PLP -> do
             val <- popStack
             #fReg .= Flags val
-            sp' <- use #sp
-            if spInRange sp'
-                then return Running
-                else return (CPUError "Stack Underflow")
+            spInRangeM
         -- Logical Ops
-        AND -> do
-            undefined
+        AND -> executeLogicalOp inst (.&.)
+        EOR -> executeLogicalOp inst xor
+        ORA -> executeLogicalOp inst (.|.)
+        BIT -> do
+            aVal  <- getReg <$> use #aReg
+            opVal <- resolveOperands opt
+            let result = aVal .&. opVal
+            updateFlag (result == 0)       ZF
+            updateFlag (isNegative result) NF
+            updateFlag (isOverflow opVal)  OF  -- this is the same as testBit but I don't know if Data.Bits uses 0 index
+            return Running
+        ADC ->
+            use #fReg >>= \f ->
+                if (f .&. decFlag) == 1 then addDecimal else addBinary
+
         _ -> error $ "Instruction hasn't been implemented" <> show inst
 
 -- | Execute one of: LDX | LDA | LDY
@@ -156,24 +137,56 @@ executeLoad (Instruction (OpCode _ opName _) ops) = do
             LDA -> #aReg
             x   -> error $ show x
     register .= Reg loadVal
-    updateFlagM (loadVal == 0)  ZF
-    updateFlagM (isNeg loadVal) NF
+    updateFlag (loadVal == 0)       ZF
+    updateFlag (isNegative loadVal) NF
     return Running
 
 -- | Execute one of: STA | STX | STY
 executeStore :: Instruction -> Emulator CPUState
-executeStore (Instruction (OpCode _ opName _) (Operands _ (OpTMemory addr))) =
-    do
-        let register = case opName of
-                STA -> #aReg
-                STX -> #xReg
-                STY -> #yReg
-                x   -> error $ show x
+executeStore (Instruction (OpCode _ opName _) (OpTMemory addr)) = do
+    let register = case opName of
+            STA -> #aReg
+            STX -> #xReg
+            STY -> #yReg
+            x   -> error $ show x
+    (Reg regVal) <- use register
+    setMemory addr [regVal]
+    return Running
+-- can't use resolveOperands as Store requires a memory address
+executeStore i =
+    error $ "executeStore received invalid instruction: " <> show i
 
-        (Reg regVal) <- use register
-        setMemory addr [regVal]
-        return Running
-executeStore i = error $ "executeStore received invalid instruction" <> show i
+-- | Execute one of: TAX | TAY | TXA | TYA
+executeTransfer :: Instruction -> Emulator CPUState
+executeTransfer (Instruction (OpCode _ opName _) _) = do
+    let (fromReg, toReg) = case opName of
+            TAX -> (#aReg, #xReg)
+            TAY -> (#aReg, #yReg)
+            TXA -> (#xReg, #aReg)
+            TYA -> (#yReg, #aReg)
+            _   -> undefined
+    (Reg val) <- use fromReg
+    updateFlag (val == 0)       ZF
+    updateFlag (isNegative val) NF
+    toReg .= Reg val
+    return Running
+
+-- | Execute one of: AND | EOR | ORA
+executeLogicalOp :: Instruction -> (Byte -> Byte -> Byte) -> Emulator CPUState
+executeLogicalOp (Instruction _ opt) logOp = do
+    aVal  <- getReg <$> use #aReg
+    opVal <- resolveOperands opt
+    let result = logOp aVal opVal
+    updateFlag (result == 0x0)     ZF
+    updateFlag (isNegative result) NF
+    #aReg .= Reg result
+    return Running
+
+addBinary :: Emulator CPUState
+addBinary = undefined
+
+addDecimal :: Emulator CPUState
+addDecimal = undefined
 
 -- | Decode an address
 -- | ZeroPage -> we want to keep them as bytes so we wrap on the
@@ -188,33 +201,37 @@ executeStore i = error $ "executeStore received invalid instruction" <> show i
 -- |            of indirect address, then combine
 -- | IndirectX/Y -> constructs an indirect address that is in the ZeroPage
 -- | Immediate   -> returns the exact byte
-decodeOperand :: OpName -> AddressType -> [Byte] -> Emulator Operands
-decodeOperand _ ZeroPage  b@[b1] = return (Operands b (OpTValue b1))
-decodeOperand _ ZeroPageX b@[b1] = gets (getReg . xReg)
-    >>= \x -> return (Operands b (OpTMemory (fromIntegral $ b1 + x)))
-decodeOperand _ ZeroPageY b@[b1] = gets (getReg . yReg)
-    >>= \y -> return (Operands b (OpTMemory (fromIntegral $ b1 + y)))
-decodeOperand _ Relative b@[b1] = gets (getPC . pc)
-    >>= \p -> return (Operands b (OpTMemory (fromIntegral b1 + p)))
-decodeOperand _ Absolute b@[b1, b2] =
-    return (Operands b (OpTMemory (toAddress b1 b2)))
-decodeOperand _ AbsoluteX b@[b1, b2] = gets (getReg . xReg) >>= \x ->
-    return (Operands b (OpTMemory (toAddress b1 b2 + fromIntegral x)))
-decodeOperand _ AbsoluteY b@[b1, b2] = gets (getReg . yReg) >>= \y ->
-    return (Operands b (OpTMemory (toAddress b1 b2 + fromIntegral y)))
-decodeOperand _ IndirectX b@[b1] = do
-    x    <- fromIntegral . getReg <$> gets xReg
+decodeOperand :: OpName -> AddressType -> [Byte] -> Emulator Operand
+decodeOperand _ ZeroPage [b1] = return (OpTMemory $ fromIntegral b1)
+decodeOperand _ ZeroPageX [b1] =
+    use #xReg >>= (\x -> return (OpTMemory (fromIntegral $ b1 + x))) . getReg
+decodeOperand _ ZeroPageY [b1] =
+    use #yReg >>= (\y -> return (OpTMemory (fromIntegral $ b1 + y))) . getReg
+decodeOperand _ Relative [b1] =
+    use #pc >>= (\p -> return (OpTMemory (fromIntegral b1 + p))) . getPC
+decodeOperand _ Absolute [b1, b2] = return (OpTMemory (toAddress b1 b2))
+decodeOperand _ AbsoluteX [b1, b2] =
+    use #xReg
+        >>= (\x -> return (OpTMemory (toAddress b1 b2 + fromIntegral x)))
+        .   getReg
+decodeOperand _ AbsoluteY [b1, b2] =
+    use #yReg
+        >>= (\y -> return (OpTMemory (toAddress b1 b2 + fromIntegral y)))
+        .   getReg
+-- FIXME: Indirect gets the low byte of an address need upper bits
+decodeOperand _ IndirectX [b1] = do
+    x    <- getReg <$> use #xReg
     addr <- fetchAddress $ fromIntegral (b1 + x)
-    return (Operands b (OpTMemory addr))
-decodeOperand _ IndirectY b@[b1] = do
-    y    <- fromIntegral . getReg <$> gets yReg
+    return (OpTMemory addr)
+decodeOperand _ IndirectY [b1] = do
+    y    <- fromIntegral . getReg <$> use #yReg
     addr <- fetchAddress $ fromIntegral b1
-    return (Operands b (OpTMemory (addr + y)))
-decodeOperand _ Indirect b@[b1, b2] = do
+    return (OpTMemory (addr + y))
+decodeOperand _ Indirect [b1, b2] = do
     addr <- fetchAddress $ toAddress b1 b2
-    return (Operands b (OpTMemory addr))
-decodeOperand _ Immediate b@[b1] = return (Operands b (OpTValue b1))
-decodeOperand opn (Implicit _) b = return (Operands b (implicitOperand opn))
+    return (OpTMemory addr)
+decodeOperand _   Immediate [b1] = return (OpTValue b1)
+decodeOperand opn Implicit  _    = return (implicitOperand opn)
 decodeOperand opn addr b =
     error
         $  "Invalid Operand with: "
@@ -236,13 +253,16 @@ decodeInstruction = do
     incrementPC (length ops)
     Instruction op <$> decodeOperand opn addr ops
 
-resolveOperands :: Operands -> Emulator Byte
-resolveOperands (Operands _ (OpTValue  val )) = return val
-resolveOperands (Operands _ (OpTMemory addr)) = gets (\c -> memory c IA.! addr)
-resolveOperands (Operands _ OpTXReg         ) = gets (getReg . xReg)
-resolveOperands (Operands _ OpTYReg         ) = gets (getReg . yReg)
-resolveOperands (Operands _ OpTAReg         ) = gets (getReg . aReg)
-resolveOperands _                             = undefined
+-- Get the Byte value associated with Operand
+-- Most instructions will have to inspect directly the Operand
+-- but some instructions require a byte
+resolveOperands :: Operand -> Emulator Byte
+resolveOperands (OpTValue  val ) = return val
+resolveOperands (OpTMemory addr) = gets (\c -> memory c IA.! addr)
+resolveOperands OpTXReg          = gets (getReg . xReg)
+resolveOperands OpTYReg          = gets (getReg . yReg)
+resolveOperands OpTAReg          = gets (getReg . aReg)
+resolveOperands _                = undefined
 
 incrementPC :: Int -> Emulator ()
 incrementPC num = #pc %= (+) (1 + fromIntegral num)
@@ -263,31 +283,40 @@ fetchByte addr = do
     mem <- gets memory
     return $ mem IA.! addr
 
+fetchAddress :: Address -> Emulator Address
+fetchAddress addr = do
+    mem <- use #memory
+    return $ toAddress (mem IA.! addr) (mem IA.! (addr + 1))
+
 -- pop value from stack and increment pointer
 popStack :: Emulator Byte
 popStack = do
-    (SP sp') <- gets sp
-    mem      <- gets memory
+    (SP sp') <- use #sp
+    mem      <- use #memory
     incrementSP
     return $ mem IA.! sp'
 
 -- push a value on to stack and decrement pointer
 pushStack :: Byte -> Emulator ()
 pushStack byte = do
-    (SP sp') <- gets sp
+    (SP sp') <- use #sp
     #memory %= (\m -> m IA.// [(sp', byte)])
     decrementSP
 
-fetchAddress :: Address -> Emulator Address
-fetchAddress addr = do
-    mem <- gets memory
-    return $ toAddress (mem IA.! addr) (mem IA.! (addr + 1))
+spInRangeM :: Emulator CPUState
+spInRangeM = do
+    sp' <- use #sp
+    return $ if
+        | spBelowFloor sp'   -> CPUError StackOverflow
+        | spAboveCeiling sp' -> CPUError StackUnderflow
+        | otherwise          -> Running
 
-spInRange :: StackPointer -> Bool
-spInRange sp = spAboveFloor sp && spBelowCeiling sp
 
-spAboveFloor :: StackPointer -> Bool
-spAboveFloor (SP sp) = sp >= 0x0100
+-- spInRange :: StackPointer -> Bool
+-- spInRange sp = spAboveFloor sp && spBelowCeiling sp
 
-spBelowCeiling :: StackPointer -> Bool
-spBelowCeiling (SP sp) = sp <= 0x01FF
+spBelowFloor :: StackPointer -> Bool
+spBelowFloor (SP sp) = sp < 0x0100
+
+spAboveCeiling :: StackPointer -> Bool
+spAboveCeiling (SP sp) = sp > 0x01FF

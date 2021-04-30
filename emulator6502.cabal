@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c571605b53da653418a2375d4fe6fa87404a97e710e43ad07344738ac5ac1c70
+-- hash: e98e3ccc5e44705c74c6c4ad348217ea922e7f204b8bc9e3c1cb5bdd07311d0c
 
 name:           emulator6502
 version:        0.1.0.0
@@ -36,7 +36,7 @@ library
       Paths_emulator6502
   hs-source-dirs:
       src
-  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes
+  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
   build-depends:
       array
     , base >=4.7 && <5
@@ -52,7 +52,7 @@ executable emulator6502-exe
       Paths_emulator6502
   hs-source-dirs:
       app
-  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes
+  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       array
@@ -69,10 +69,14 @@ test-suite emulator6502-test
   main-is: Test.hs
   other-modules:
       LoadStoreTest
+      LogicalTest
+      StackTest
+      TestUtils
+      TransferTest
       Paths_emulator6502
   hs-source-dirs:
       test
-  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes
+  default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       array

@@ -12,8 +12,8 @@ import qualified Data.Array.IArray             as IA
 import           Emulator
 import           Numeric                        ( showHex )
 
-showCPUValue :: Show a => (CPU -> a) -> CPU -> String
-showCPUValue f = show . f
+showCPUValue :: Display a => (CPU -> a) -> CPU -> String
+showCPUValue v = display . v
 
 showXReg :: CPU -> String
 showXReg = showCPUValue xReg
@@ -35,3 +35,18 @@ showNBytes addr offset CPU {..} =
     [ showHex i "" <> ": " <> showHex (memory IA.! i) ""
     | i <- [addr .. (addr + offset)]
     ]
+
+-- | Display is simply a Show instance for the User.
+class Display a where
+  display :: a -> String
+
+instance Display Register where
+    display (Reg val) = showHex val ""
+instance Display Flags where
+    display (Flags val) = showHex val ""
+
+instance Display StackPointer where
+    display (SP val) = showHex val ""
+
+instance Display ProgramCounter where
+    display (PC val) = showHex val ""

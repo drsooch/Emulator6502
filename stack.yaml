@@ -3,7 +3,7 @@ resolver: lts-16.31
 ghc-options:
     "$locals": -Wall
     "$targets": -Werror
-    "$everything": -O2
+    "$everything": -O2 -fwrite-ide-info -hiedir=.hie
 
 packages:
 - .
