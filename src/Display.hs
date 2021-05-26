@@ -9,8 +9,8 @@ module Display
     ) where
 
 import qualified Data.Array.IArray             as IA
-import           Emulator
 import           Numeric                        ( showHex )
+import           Types
 
 showCPUValue :: Display a => (CPU -> a) -> CPU -> String
 showCPUValue v = display . v

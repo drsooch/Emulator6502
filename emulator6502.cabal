@@ -1,10 +1,4 @@
-cabal-version: 1.12
-
--- This file has been generated from package.yaml by hpack version 0.33.0.
---
--- see: https://github.com/sol/hpack
---
--- hash: e98e3ccc5e44705c74c6c4ad348217ea922e7f204b8bc9e3c1cb5bdd07311d0c
+cabal-version: 2.4 
 
 name:           emulator6502
 version:        0.1.0.0
@@ -14,7 +8,7 @@ bug-reports:    https://github.com/drsooch/emulator6502/issues
 author:         Nick Suchecki
 maintainer:     nicksuchecki@gmail.com
 copyright:      None
-license:        BSD3
+license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
 extra-source-files:
@@ -28,18 +22,22 @@ source-repository head
 library
   exposed-modules:
       Display
-      Emulator
+      Types
       Execution
       Flags
       Instruction
+      Decode
+      Stack
+      ProgramCounter
   other-modules:
       Paths_emulator6502
   hs-source-dirs:
       src
   default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
+  ghc-options: -Wall -O2 -fwrite-ide-info -hiedir=.hie
   build-depends:
       array
-    , base >=4.7 && <5
+    , base >=4.14 && <5
     , generic-lens
     , microlens
     , microlens-mtl
@@ -53,10 +51,10 @@ executable emulator6502-exe
   hs-source-dirs:
       app
   default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N -O2 -fwrite-ide-info -hiedir=.hie
   build-depends:
       array
-    , base >=4.7 && <5
+    , base >=4.14 && <5
     , emulator6502
     , generic-lens
     , microlens
@@ -68,6 +66,7 @@ test-suite emulator6502-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
+      ADCTest
       LoadStoreTest
       LogicalTest
       StackTest
@@ -77,10 +76,10 @@ test-suite emulator6502-test
   hs-source-dirs:
       test
   default-extensions: RecordWildCards LambdaCase DerivingStrategies GeneralizedNewtypeDeriving DerivingVia DeriveGeneric TypeApplications OverloadedLabels DataKinds AllowAmbiguousTypes MultiWayIf StrictData
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N 
   build-depends:
       array
-    , base >=4.7 && <5
+    , base >=4.14 && <5
     , emulator6502
     , generic-lens
     , microlens

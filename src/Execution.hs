@@ -4,52 +4,31 @@ module Execution
     , execute
     ) where
 
-import           Control.Monad.RWS.Strict       ( MonadState(get)
-                                                , RWST(runRWST)
+import           Control.Monad.RWS.Strict       ( RWST(runRWST)
                                                 , void
                                                 )
-import           Control.Monad.State.Strict     ( gets )
 import qualified Data.Array.IArray             as IA
 import           Data.Bits                      ( (.&.)
                                                 , (.|.)
                                                 , shiftL
+                                                , shiftR
+                                                , testBit
                                                 , xor
                                                 )
 import           Data.Word                      ( )
-import           Emulator                       ( Address
-                                                , Byte
-                                                , CPU(..)
-                                                , CPUErrorType(..)
-                                                , CPUState(..)
-                                                , Emulator
-                                                , Flags(..)
-                                                , Operand(..)
-                                                , ProgramCounter(..)
-                                                , Register(..)
-                                                , StackPointer(SP, getSP)
-                                                , mkCPU
-                                                , setMemory
-                                                )
-import           Flags                          ( FlagType(..)
-                                                , decFlag
-                                                , isNegative
-                                                , isOverflow
-                                                , updateFlag
-                                                )
-import           Instruction                    ( AddressType(..)
-                                                , Instruction(..)
-                                                , OpCode(..)
-                                                , OpName(..)
-                                                , decodeOpCode
-                                                , implicitOperand
-                                                , operandNum
-                                                )
+
+import           Decode
+import           Flags
+import           Instruction
 import           Lens.Micro.Mtl                 ( (%=)
-                                                , (+=)
-                                                , (-=)
                                                 , (.=)
+                                                , (<%=)
+                                                , (<.=)
+                                                , assign
                                                 , use
                                                 )
+import           Stack
+import           Types
 
 -- full "factory" reset
 hardResetCPU :: CPU -> CPU
@@ -71,7 +50,6 @@ execute = decodeInstruction >>= executeInstruction
 
 executeInstruction :: Instruction -> Emulator CPUState
 executeInstruction inst@(Instruction (OpCode _ opName _) opt) = do
-    CPU {..} <- get
     case opName of
         -- Load Ops
         LDA -> executeLoad inst
@@ -89,8 +67,8 @@ executeInstruction inst@(Instruction (OpCode _ opName _) opt) = do
         -- Stack Operations
         TSX -> do
             val <- fromIntegral . getSP <$> use #sp
-            updateFlag (val == 0)       ZF
-            updateFlag (isNegative val) NF
+            #fReg %= updateFlag (isZero val) ZF
+            #fReg %= updateFlag (isNegative val) NF
             #xReg .= Reg (fromIntegral val)  -- NOTE: fromIntegral Word8 -> Word16 clears high bits (which is what we want)
             return Running
         TXS -> do
@@ -102,8 +80,8 @@ executeInstruction inst@(Instruction (OpCode _ opName _) opt) = do
         PLA -> do
             val <- popStack
             #aReg .= Reg val
-            updateFlag (val == 0)       ZF
-            updateFlag (isNegative val) NF
+            #fReg %= updateFlag (isZero val) ZF
+            #fReg %= updateFlag (isNegative val) NF
             spInRangeM
         PLP -> do
             val <- popStack
@@ -114,18 +92,43 @@ executeInstruction inst@(Instruction (OpCode _ opName _) opt) = do
         EOR -> executeLogicalOp inst xor
         ORA -> executeLogicalOp inst (.|.)
         BIT -> do
+            -- BIT is weird... Updates ZERO FLAG if A Reg & OpValue is Zero
+            -- Then set Negative Flag to bit 7 of OpValue
+            -- Then set Overflow Flag to bit 6 of OpValue
             aVal  <- getReg <$> use #aReg
             opVal <- resolveOperands opt
             let result = aVal .&. opVal
-            updateFlag (result == 0)       ZF
-            updateFlag (isNegative result) NF
-            updateFlag (isOverflow opVal)  OF  -- this is the same as testBit but I don't know if Data.Bits uses 0 index
+            #fReg %= updateFlag (isZero result) ZF
+            #fReg %= updateFlag (isNegative opVal) NF
+            #fReg %= updateFlag (testBit opVal 6) OF  -- Not a fan of this
             return Running
-        ADC ->
-            use #fReg >>= \f ->
-                if (f .&. decFlag) == 1 then addDecimal else addBinary
+        -- Arithmetic Ops
+        ADC -> isFlagSet DF
+            >>= \dec -> if dec then addDecimal inst else addBinary inst
+        SBC -> isFlagSet DF
+            >>= \dec -> if dec then subDecimal inst else subBinary inst
+        -- not sure why this is defined as Arithmetic Op but oh well.
+        CMP -> executeCompare inst
+        CPX -> executeCompare inst
+        CPY -> executeCompare inst
+        -- Increment/Decrement Ops
+        INC -> case opt of
+            OpTMemory addr -> executeIncOrDecMem (+) opt addr
+            _ -> error $ "Invalid OperandType for INC: " <> show inst
+        INX -> executeIncOrDecReg (+) #xReg
+        INY -> executeIncOrDecReg (+) #yReg
+        DEC -> case opt of
+            OpTMemory addr -> executeIncOrDecMem (-) opt addr
+            _ -> error $ "Invalid OperandType for DEC: " <> show inst
+        DEX -> executeIncOrDecReg (-) #xReg
+        DEY -> executeIncOrDecReg (-) #yReg
+        -- Shift Ops
+        ASL -> undefined
+        LSR -> undefined
+        ROL -> undefined
+        ROR -> undefined
+        _   -> error $ "Instruction hasn't been implemented" <> show inst
 
-        _ -> error $ "Instruction hasn't been implemented" <> show inst
 
 -- | Execute one of: LDX | LDA | LDY
 executeLoad :: Instruction -> Emulator CPUState
@@ -137,8 +140,8 @@ executeLoad (Instruction (OpCode _ opName _) ops) = do
             LDA -> #aReg
             x   -> error $ show x
     register .= Reg loadVal
-    updateFlag (loadVal == 0)       ZF
-    updateFlag (isNegative loadVal) NF
+    #fReg %= updateFlag (isZero loadVal) ZF
+    #fReg %= updateFlag (isNegative loadVal) NF
     return Running
 
 -- | Execute one of: STA | STX | STY
@@ -159,164 +162,135 @@ executeStore i =
 -- | Execute one of: TAX | TAY | TXA | TYA
 executeTransfer :: Instruction -> Emulator CPUState
 executeTransfer (Instruction (OpCode _ opName _) _) = do
-    let (fromReg, toReg) = case opName of
+    let
+        (fromReg, toReg) = case opName of
             TAX -> (#aReg, #xReg)
             TAY -> (#aReg, #yReg)
             TXA -> (#xReg, #aReg)
             TYA -> (#yReg, #aReg)
-            _   -> undefined
-    (Reg val) <- use fromReg
-    updateFlag (val == 0)       ZF
-    updateFlag (isNegative val) NF
-    toReg .= Reg val
+            invalid ->
+                error
+                    $  "Invalid instruction in executeTransfer: "
+                    <> show invalid
+    toVal@(Reg val) <- use fromReg
+    #fReg %= updateFlag (isZero val) ZF
+    #fReg %= updateFlag (isNegative val) NF
+    toReg .= toVal
     return Running
 
 -- | Execute one of: AND | EOR | ORA
 executeLogicalOp :: Instruction -> (Byte -> Byte -> Byte) -> Emulator CPUState
 executeLogicalOp (Instruction _ opt) logOp = do
-    aVal  <- getReg <$> use #aReg
-    opVal <- resolveOperands opt
-    let result = logOp aVal opVal
-    updateFlag (result == 0x0)     ZF
-    updateFlag (isNegative result) NF
-    #aReg .= Reg result
+    aVal         <- getReg <$> use #aReg
+    opVal        <- resolveOperands opt
+    (Reg result) <- #aReg <.= (Reg $ logOp aVal opVal)
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF
     return Running
 
-addBinary :: Emulator CPUState
-addBinary = undefined
+-- | Execute ADC with DF clear
+addBinary :: Instruction -> Emulator CPUState
+addBinary (Instruction _ opt) = do
+    aVal         <- getReg <$> use #aReg
+    adder        <- resolveOperands opt
+    carry        <- boolToByte <$> isFlagSet CF
+    (Reg result) <- #aReg <.= (Reg $ aVal + adder + carry)
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF
+    #fReg %= updateFlag (isOverflow aVal adder result) OF
+    #fReg %= updateFlag (isCarryAdd aVal result carry) CF
+    return Running
 
-addDecimal :: Emulator CPUState
-addDecimal = undefined
+-- | Execute SBC with DF clear
+subBinary :: Instruction -> Emulator CPUState
+subBinary (Instruction _ opt) = do
+    aVal         <- getReg <$> use #aReg
+    subber       <- resolveOperands opt
+    carry        <- boolToByte . not <$> isFlagSet CF
+    (Reg result) <- #aReg <.= (Reg $ aVal - subber - carry)
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF
+    #fReg %= updateFlag (isOverflow aVal subber result) OF
+    #fReg %= updateFlag (isCarrySub aVal subber) CF
+    return Running
 
--- | Decode an address
--- | ZeroPage -> we want to keep them as bytes so we wrap on the
--- |          ZeroPage boundary
--- | Relative -> applies an offset to current PC
--- | Absolute -> converts 2 bytes into an address
--- | AbsoluteX/Y -> converts 2 bytes into an address and applies offset
--- |             from X or Y register
--- | Indirect -> constructs address from 2 bytes, the result is then
--- |            an address of the MSB of the indirect address.
--- |            Then move the address one byte to get the LSB
--- |            of indirect address, then combine
--- | IndirectX/Y -> constructs an indirect address that is in the ZeroPage
--- | Immediate   -> returns the exact byte
-decodeOperand :: OpName -> AddressType -> [Byte] -> Emulator Operand
-decodeOperand _ ZeroPage [b1] = return (OpTMemory $ fromIntegral b1)
-decodeOperand _ ZeroPageX [b1] =
-    use #xReg >>= (\x -> return (OpTMemory (fromIntegral $ b1 + x))) . getReg
-decodeOperand _ ZeroPageY [b1] =
-    use #yReg >>= (\y -> return (OpTMemory (fromIntegral $ b1 + y))) . getReg
-decodeOperand _ Relative [b1] =
-    use #pc >>= (\p -> return (OpTMemory (fromIntegral b1 + p))) . getPC
-decodeOperand _ Absolute [b1, b2] = return (OpTMemory (toAddress b1 b2))
-decodeOperand _ AbsoluteX [b1, b2] =
-    use #xReg
-        >>= (\x -> return (OpTMemory (toAddress b1 b2 + fromIntegral x)))
-        .   getReg
-decodeOperand _ AbsoluteY [b1, b2] =
-    use #yReg
-        >>= (\y -> return (OpTMemory (toAddress b1 b2 + fromIntegral y)))
-        .   getReg
--- FIXME: Indirect gets the low byte of an address need upper bits
-decodeOperand _ IndirectX [b1] = do
-    x    <- getReg <$> use #xReg
-    addr <- fetchAddress $ fromIntegral (b1 + x)
-    return (OpTMemory addr)
-decodeOperand _ IndirectY [b1] = do
-    y    <- fromIntegral . getReg <$> use #yReg
-    addr <- fetchAddress $ fromIntegral b1
-    return (OpTMemory (addr + y))
-decodeOperand _ Indirect [b1, b2] = do
-    addr <- fetchAddress $ toAddress b1 b2
-    return (OpTMemory addr)
-decodeOperand _   Immediate [b1] = return (OpTValue b1)
-decodeOperand opn Implicit  _    = return (implicitOperand opn)
-decodeOperand opn addr b =
-    error
-        $  "Invalid Operand with: "
-        <> show opn
-        <> " "
-        <> show addr
-        <> " "
-        <> show b
+-- | Execute ADC with DF set
+addDecimal :: Instruction -> Emulator CPUState
+addDecimal (Instruction _ opt) = do
+    aVal  <- getReg <$> use #aReg
+    adder <- resolveOperands opt
+    carry <- boolToByte <$> isFlagSet CF
+    let onesDigit = (aVal .&. 0xF) + (adder .&. 0xF) + carry  -- compute lower bits addition
+    let (onesCarry, onesDigit') = if onesDigit .&. 0xF > 0    -- if we carry into upper bits, we add 0x6 to onesDigits to simulate wrapping
+            then (0x1, onesDigit + 0x6)
+            else (0x0, onesDigit)
+    let tensDigit = (aVal `shiftR` 4) + (adder `shiftR` 4) + onesCarry  -- compute upper bits
+    let (bcdCarry, tensDigit') = if tensDigit .&. 0xF > 0 -- if we carry into upper bits, we add 0x6 to tensDigit to simulate wrapping
+            then (True, tensDigit + 0x6)
+            else (False, tensDigit)
+    (Reg result) <- #aReg <.= (Reg $ tensDigit' `shiftL` 4 + onesDigit')
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF  -- 6502 inspects BCD bit 7 even though it doesn't make much sense
+    #fReg %= updateFlag False OF                -- 6502 overflow flag is undefined for BCD
+    #fReg %= updateFlag bcdCarry CF
+    return Running
 
--- decode an Instruction and grab the inputs based on AddressType
-decodeInstruction :: Emulator Instruction
-decodeInstruction = do
-    CPU {..}               <- get
-    op@(OpCode _ opn addr) <- decodeOpCode <$> fetchByte (getPC pc)
-    ops                    <- sequenceA $ case operandNum addr of
-        2 -> [fetchByte (getPC pc + 1), fetchByte (getPC pc + 2)]
-        1 -> [fetchByte (getPC pc + 1)]
-        _ -> []
-    incrementPC (length ops)
-    Instruction op <$> decodeOperand opn addr ops
+-- | Execute SBC with DF set
+subDecimal :: Instruction -> Emulator CPUState
+subDecimal (Instruction _ opt) = do
+    _     <- error "SUB DECIMAL not implemented"
+    aVal  <- getReg <$> use #aReg
+    adder <- resolveOperands opt
+    carry <- boolToByte . not <$> isFlagSet CF
+    let onesDigit = (aVal .&. 0xF) - (adder .&. 0xF) - carry  -- compute lower bits addition
+    let (onesCarry, onesDigit') = if onesDigit .&. 0xF > 0    -- if we carry into upper bits, we add 0x6 to onesDigits to simulate wrapping
+            then (0x1, onesDigit + 0x6)
+            else (0x0, onesDigit)
+    let tensDigit = (aVal `shiftR` 4) + (adder `shiftR` 4) + onesCarry  -- compute upper bits
+    let (bcdCarry, tensDigit') = if tensDigit .&. 0xF > 0 -- if we carry into upper bits, we add 0x6 to tensDigit to simulate wrapping
+            then (True, tensDigit + 0x6)
+            else (False, tensDigit)
+    (Reg result) <- #aReg <.= (Reg $ tensDigit' `shiftL` 4 + onesDigit')
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF  -- 6502 inspects BCD bit 7 even though it doesn't make much sense
+    #fReg %= updateFlag False OF                -- 6502 overflow flag is undefined for BCD
+    #fReg %= updateFlag bcdCarry CF
+    return Running
 
--- Get the Byte value associated with Operand
--- Most instructions will have to inspect directly the Operand
--- but some instructions require a byte
-resolveOperands :: Operand -> Emulator Byte
-resolveOperands (OpTValue  val ) = return val
-resolveOperands (OpTMemory addr) = gets (\c -> memory c IA.! addr)
-resolveOperands OpTXReg          = gets (getReg . xReg)
-resolveOperands OpTYReg          = gets (getReg . yReg)
-resolveOperands OpTAReg          = gets (getReg . aReg)
-resolveOperands _                = undefined
+-- | Execute one of: CMP | CPY | CPX
+executeCompare :: Instruction -> Emulator CPUState
+executeCompare (Instruction opCode opt) =
+    executeCompare' opt . getReg =<< case getOpName opCode of
+        CMP -> use #aReg
+        CPY -> use #yReg
+        CPX -> use #xReg
+        invalid ->
+            error
+                $  "Invalid instruction called with executeCompare: "
+                <> show invalid
 
-incrementPC :: Int -> Emulator ()
-incrementPC num = #pc %= (+) (1 + fromIntegral num)
+executeCompare' :: OperandType -> Byte -> Emulator CPUState
+executeCompare' opt regVal = do
+    cmpVal <- resolveOperands opt
+    #fReg %= updateFlag (regVal >= cmpVal) CF
+    #fReg %= updateFlag (regVal == cmpVal) ZF
+    #fReg %= updateFlag (isNegative $ regVal - cmpVal) NF
+    return Running
 
-incrementSP :: Emulator ()
-incrementSP = #sp += 1
+executeIncOrDecReg
+    :: (Register -> Register -> Register) -> RegisterName -> Emulator CPUState
+executeIncOrDecReg binOp reg = do
+    (Reg result) <- reg <%= binOp (Reg 1)
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF
+    return Running
 
-decrementSP :: Emulator ()
-decrementSP = #sp -= 1
-
--- convert two bytes into a 2 byte address
--- Little Endian
-toAddress :: Byte -> Byte -> Address
-toAddress lsb msb = fromIntegral msb `shiftL` 8 + fromIntegral lsb
-
-fetchByte :: Address -> Emulator Byte
-fetchByte addr = do
-    mem <- gets memory
-    return $ mem IA.! addr
-
-fetchAddress :: Address -> Emulator Address
-fetchAddress addr = do
-    mem <- use #memory
-    return $ toAddress (mem IA.! addr) (mem IA.! (addr + 1))
-
--- pop value from stack and increment pointer
-popStack :: Emulator Byte
-popStack = do
-    (SP sp') <- use #sp
-    mem      <- use #memory
-    incrementSP
-    return $ mem IA.! sp'
-
--- push a value on to stack and decrement pointer
-pushStack :: Byte -> Emulator ()
-pushStack byte = do
-    (SP sp') <- use #sp
-    #memory %= (\m -> m IA.// [(sp', byte)])
-    decrementSP
-
-spInRangeM :: Emulator CPUState
-spInRangeM = do
-    sp' <- use #sp
-    return $ if
-        | spBelowFloor sp'   -> CPUError StackOverflow
-        | spAboveCeiling sp' -> CPUError StackUnderflow
-        | otherwise          -> Running
-
-
--- spInRange :: StackPointer -> Bool
--- spInRange sp = spAboveFloor sp && spBelowCeiling sp
-
-spBelowFloor :: StackPointer -> Bool
-spBelowFloor (SP sp) = sp < 0x0100
-
-spAboveCeiling :: StackPointer -> Bool
-spAboveCeiling (SP sp) = sp > 0x01FF
+executeIncOrDecMem
+    :: (Byte -> Byte -> Byte) -> OperandType -> Address -> Emulator CPUState
+executeIncOrDecMem binOp opt addr = do
+    curVal <- resolveOperands opt
+    let result = curVal `binOp` 1
+    #fReg %= updateFlag (isZero result) ZF
+    #fReg %= updateFlag (isNegative result) NF
+    setMemory addr [result]
+    return Running

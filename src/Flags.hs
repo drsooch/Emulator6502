@@ -1,12 +1,14 @@
 -- | Manipulating the Flag Register
 module Flags
-    ( FlagType(..)
-    ,
+    (
     -- functions
       updateFlag
     , isFlagSet
     , isNegative
     , isOverflow
+    , isZero
+    , isCarryAdd
+    , isCarrySub
     ,
     -- Constants
       carryFlag
@@ -23,12 +25,11 @@ import           Data.Bits                      ( (.&.)
                                                 , Bits
                                                 , complement
                                                 , testBit
+                                                , xor
                                                 )
-import           Emulator
 import           Lens.Micro.Mtl
+import           Types
 
-data FlagType = CF | ZF | IF | DF | BF | OF | NF
-  deriving (Eq, Show)
 
 -- Bits for individual flags
 carryFlag, zeroFlag, intFlag, decFlag, brkFlag, ovFlag, negFlag
@@ -68,12 +69,9 @@ setFlag ft flags = flags .|. toBitRep ft
 clearFlag :: FlagType -> Flags -> Flags
 clearFlag ft flags = flags .&. complement (toBitRep ft)
 
-updateFlag :: Bool -> FlagType -> Emulator ()
-updateFlag bool ft = #fReg %= updateFlag' bool ft
-
-updateFlag' :: Bool -> FlagType -> Flags -> Flags
-updateFlag' True  = setFlag
-updateFlag' False = clearFlag
+updateFlag :: Bool -> FlagType -> Flags -> Flags
+updateFlag True  = setFlag
+updateFlag False = clearFlag
 
 isFlagSet :: FlagType -> Emulator Bool
 isFlagSet fType =
@@ -82,8 +80,38 @@ isFlagSet fType =
 isFlagSet' :: Flags -> Int -> Bool
 isFlagSet' = testBit
 
-isNegative :: Byte -> Bool
-isNegative val = isFlagSet' (Flags val) (toBitNum NF)
+{-
+Boolean Operations for checking whether to set a bit or not in Flags.
 
-isOverflow :: Byte -> Bool
-isOverflow val = isFlagSet' (Flags val) (toBitNum OF)
+Generally used in conjuction with `updateFlag`.
+
+-}
+
+-- check if result is negative (7th bit)
+isNegative :: Byte -> Bool
+isNegative = flip testBit 7
+
+-- Checks to see if overflow occurs in arithmetic operation
+-- LHS ^ RESULT -> checks if sign bit differs
+-- RHS ^ RESULT -> checks if sign bit differs
+-- AND the results above, this checks if both LHS and RHS had differing signs from RESULT
+-- MASK out the top bit, if not equal to 0 we have overflow
+isOverflow :: Byte -> Byte -> Byte -> Bool
+isOverflow lhs rhs res =
+    (((lhs `xor` res) .&. (rhs `xor` res)) .&. 0x80) /= 0x0
+
+-- Guess what this does? ;)
+isZero :: Byte -> Bool
+isZero = (==) 0
+
+-- Check to see if result is less than the accumulator
+-- must capture the current carry bit
+isCarryAdd :: Byte -> Byte -> Byte -> Bool
+isCarryAdd acc result 1 = result <= acc
+isCarryAdd acc result 0 = result < acc
+isCarryAdd _   _      _ = error "isCarry received an invalid Carry Bit"
+
+-- Carry is set when accumulator is GTEQ to the value to subtract
+-- "Quirk" of the SBC instruction, I think...
+isCarrySub :: Byte -> Byte -> Bool
+isCarrySub acc subber = acc >= subber

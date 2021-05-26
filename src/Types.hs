@@ -1,17 +1,23 @@
-module Emulator
+module Types
     ( Emulator
     , Byte
     , Address
     , Offset
     , Memory
+    , RegisterName
     , ProgramCounter(..)
     , StackPointer(..)
     , Register(..)
     , Flags(..)
-    , Operand(..)
+    , FlagType(..)
     , CPU(..)
     , CPUState(..)
     , CPUErrorType(..)
+    , Instruction(..)
+    , AddressType(..)
+    , OpCode(..)
+    , OpName(..)
+    , OperandType(..)
     ,
     -- Constructors
       mkCPU
@@ -37,7 +43,10 @@ import           Data.Word                      ( Word16
                                                 , Word8
                                                 )
 import           GHC.Generics                   ( Generic )
+import           Lens.Micro                     ( LensLike )
 import           Lens.Micro.Mtl
+import           Lens.Micro.Type                ( Getting )
+import           Text.Printf                    ( printf )
 
 -- | Notes on 6502 emulator:
 -- | Memory is 64Kb
@@ -87,6 +96,12 @@ type Emulator = RWST [String] [String] CPU IO
 -- Memory is 64Kb ~ 1024 * 64
 type Memory = UArray Address Byte
 
+-- alias for a Register Lens
+type RegisterName = (LensLike ((,) Register) CPU CPU Register Register)
+
+data FlagType = CF | ZF | IF | DF | BF | OF | NF
+  deriving (Eq, Show)
+
 newtype ProgramCounter = PC {getPC :: Address}
   deriving (Eq, Generic, Show)
   deriving (Num) via Word16
@@ -103,17 +118,6 @@ newtype Flags = Flags {getFlags :: Byte}
   deriving stock (Eq, Generic, Show)
   deriving (Num, Bits) via Word8
 
--- Where the operand of instruction comes from
-data Operand
-  = OpTXReg
-  | OpTYReg
-  | OpTAReg
-  | OpTFReg
-  | OpTStack
-  | NoOperand
-  | OpTMemory Address
-  | OpTValue Byte
-  deriving (Eq, Show)
 
 -- State of the Underlying CPU
 data CPUState
@@ -164,6 +168,99 @@ instance Show CPU where
             <> "Y Register="
             <> show (yReg cpu)
             <> "}"
+
+-- We decode instructions into this form
+data Instruction = Instruction OpCode OperandType
+    deriving Eq
+
+instance Show Instruction where
+    show (Instruction (OpCode hex op addr) _) =
+        printf "%x - %s - %s" hex (show op) (show addr)
+
+-- 6502 has 8 distinct addressing modes
+data AddressType
+  = Accumulator
+  | Implicit
+  | Absolute
+  | AbsoluteX
+  | AbsoluteY
+  | Immediate
+  | Indirect
+  | IndirectX
+  | IndirectY
+  | Relative
+  | ZeroPage
+  | ZeroPageX
+  | ZeroPageY
+  deriving (Eq, Show)
+
+-- Where the operand of instruction comes from
+data OperandType = OpTMemory Address | OpTValue Byte | OpTEmpty
+  deriving (Eq, Show)
+
+-- Instruction Mnemonics
+data OpName
+  = LDA
+  | LDX
+  | LDY
+  | STA
+  | STX
+  | STY -- load/store
+  | TAX
+  | TAY
+  | TXA
+  | TYA -- Reg transfers
+  | TSX
+  | TXS
+  | PHA
+  | PHP
+  | PLA
+  | PLP -- Stack Ops
+  | AND
+  | EOR
+  | ORA
+  | BIT -- Logical
+  | ADC
+  | SBC
+  | CMP
+  | CPX
+  | CPY -- Arithmetic
+  | INC
+  | INX
+  | INY -- Increment
+  | DEC
+  | DEX
+  | DEY -- Decrement
+  | ASL
+  | LSR
+  | ROL
+  | ROR -- Shifts
+  | JMP
+  | JSR
+  | RTS -- Jumps
+  | BCC
+  | BCS
+  | BEQ
+  | BMI
+  | BNE -- Branches
+  | BPL
+  | BVC
+  | BVS
+  | CLC
+  | CLD
+  | CLI
+  | CLV
+  | SEC -- Flag Ops
+  | SED
+  | SEI
+  | BRK
+  | NOP
+  | RTI -- System Ops
+  deriving (Eq, Show)
+
+-- encodes a byte into an OpCode
+data OpCode = OpCode Byte OpName AddressType
+    deriving (Eq, Show)
 
 -- set a range of addresses with byte values
 setMemory :: Address -> [Byte] -> Emulator ()

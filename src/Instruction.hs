@@ -1,109 +1,12 @@
 module Instruction
-    ( Instruction(..)
-    , AddressType(..)
-    , OpCode(..)
-    , OpName(..)
-    , Operand(..)
-    ,
-    -- functions
-      decodeOpCode
+    ( decodeOpCode
     , operandNum
-    , getOpCode
-    , implicitOperand
+    , getOpName
     ) where
 
 import           Data.Word                      ( )
-import           Emulator
-import           Text.Printf                    ( printf )
+import           Types
 
--- We decode instructions into this form
-data Instruction = Instruction OpCode Operand
-    deriving Eq
-
-instance Show Instruction where
-    show (Instruction (OpCode hex op addr) _) =
-        printf "%x - %s - %s" hex (show op) (show addr)
-
--- 6502 has 8 distinct addressing modes
-data AddressType
-  = Accumulator
-  | Implicit
-  | Absolute
-  | AbsoluteX
-  | AbsoluteY
-  | Immediate
-  | Indirect
-  | IndirectX
-  | IndirectY
-  | Relative
-  | ZeroPage
-  | ZeroPageX
-  | ZeroPageY
-  deriving (Eq, Show)
-
--- Instruction Mnemonics
-data OpName
-  = LDA
-  | LDX
-  | LDY
-  | STA
-  | STX
-  | STY -- load/store
-  | TAX
-  | TAY
-  | TXA
-  | TYA -- Reg transfers
-  | TSX
-  | TXS
-  | PHA
-  | PHP
-  | PLA
-  | PLP -- Stack Ops
-  | AND
-  | EOR
-  | ORA
-  | BIT -- Logical
-  | ADC
-  | SBC
-  | CMP
-  | CPX
-  | CPY -- Arithmetic
-  | INC
-  | INX
-  | INY -- Increment
-  | DEC
-  | DEX
-  | DEY -- Decrement
-  | ASL
-  | LSR
-  | ROL
-  | ROR -- Shifts
-  | JMP
-  | JSR
-  | RTS -- Jumps
-  | BCC
-  | BCS
-  | BEQ
-  | BMI
-  | BNE -- Branches
-  | BPL
-  | BVC
-  | BVS
-  | CLC
-  | CLD
-  | CLI
-  | CLV
-  | SEC -- Flag Ops
-  | SED
-  | SEI
-  | BRK
-  | NOP
-  | RTI -- System Ops
-  deriving (Eq, Show)
-
--- encodes a byte into an OpCode
-data OpCode = OpCode Byte OpName AddressType
-    deriving (Eq, Show)
 
 -- number of Bytes to get for addressing
 operandNum :: AddressType -> Int
@@ -121,18 +24,9 @@ operandNum ZeroPage    = 1
 operandNum ZeroPageX   = 1
 operandNum ZeroPageY   = 1
 
--- get the opcode from an instruction
-getOpCode :: Instruction -> OpCode
-getOpCode (Instruction opcode _) = opcode
-
-implicitOperand :: OpName -> Operand
-implicitOperand TAX = OpTXReg
-implicitOperand TAY = OpTYReg
-implicitOperand TSX = OpTXReg
-implicitOperand TXA = OpTAReg
-implicitOperand TXS = OpTStack
-implicitOperand TYA = OpTAReg
-implicitOperand _   = NoOperand
+-- get the OpName from an OpCode
+getOpName :: OpCode -> OpName
+getOpName (OpCode _ opName _) = opName
 
 -- take a Byte and turn it into an OpCode
 decodeOpCode :: Byte -> OpCode
