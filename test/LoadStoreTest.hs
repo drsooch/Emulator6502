@@ -8,14 +8,6 @@ import           Control.Monad.RWS.Strict       ( gets
 import           Data.Array.IArray              ( (//) )
 import qualified Data.Array.IArray             as IA
 import           Data.Bits                      ( Bits((.&.), (.|.)) )
-import           Emulator                       ( Address
-                                                , Byte
-                                                , CPU(..)
-                                                , Emulator
-                                                , Flags(..)
-                                                , Register(Reg)
-                                                , setMemory
-                                                )
 import           Execution                      ( execute )
 import           Flags                          ( negFlag
                                                 , zeroFlag
@@ -27,6 +19,14 @@ import           Test.Tasty.HUnit               ( (@=?)
                                                 , testCase
                                                 )
 import           TestUtils                      ( mkTestCPU )
+import           Types                          ( Address
+                                                , Byte
+                                                , CPU(..)
+                                                , Emulator
+                                                , Flags(..)
+                                                , Register(Reg)
+                                                , setMemory
+                                                )
 
 loadStore :: TestTree
 loadStore = testGroup
@@ -122,20 +122,20 @@ loadARegImmediateZero = loadAReg [0xA9, 0x0]
 
 loadARegZeroPage :: TestTree
 loadARegZeroPage =
-    loadAReg [0xA5, 0x27] 0x27 0x0 mkTestCPU "Load A Register - ZeroPage"
+    loadAReg [0xA5, 0x27] 0xD8 negFlag mkTestCPU "Load A Register - ZeroPage"
 
 loadARegZeroPageXNoWrap :: TestTree
 loadARegZeroPageXNoWrap = loadAReg [0xB5, 0x34]
-                                   0x49
-                                   0
+                                   0xB6
+                                   negFlag
                                    cpu
                                    "Load A Register - ZeroPageX - No Wrap"
     where cpu = mkTestCPU { xReg = Reg 0x15 }
 
 loadARegZeroPageXWrap :: TestTree
 loadARegZeroPageXWrap = loadAReg [0xB5, 0xD9]
-                                 0x30
-                                 0
+                                 0xCF
+                                 negFlag
                                  cpu
                                  "Load A Register - ZeroPageX - Wrap"
     where cpu = mkTestCPU { xReg = Reg 0x57 }
@@ -143,7 +143,7 @@ loadARegZeroPageXWrap = loadAReg [0xB5, 0xD9]
 loadARegAbsolute :: TestTree
 loadARegAbsolute = loadAReg [0xAD, 0x34, 0x12]
                             0x57
-                            0
+                            0x0
                             cpu'
                             "Load A Register - Absolute"
   where
@@ -181,7 +181,7 @@ loadARegIndirectX = loadAReg [0xA1, 0xC9]
                              "Load A Register - IndirectX"
   where
     cpu  = mkTestCPU { xReg = Reg 0xC0 }
-    mem  = memory cpu // [(0x8A89, 0xFF)]
+    mem  = memory cpu // [(0x7576, 0xFF)]
     cpu' = cpu { memory = mem }
 
 loadARegIndirectY :: TestTree
@@ -192,7 +192,7 @@ loadARegIndirectY = loadAReg [0xB1, 0xC9]
                              "Load A Register - IndirectY"
   where
     cpu  = mkTestCPU { yReg = Reg 0xBB }
-    mem  = memory cpu // [(0xCB84, 0xFF)]
+    mem  = memory cpu // [(0x35F1, 0xFF)]
     cpu' = cpu { memory = mem }
 
 {-------------------------------------- X Register Tests --------------------------------------}
@@ -205,12 +205,12 @@ loadXRegImmediate =
 
 loadXRegZeroPage :: TestTree
 loadXRegZeroPage =
-    loadXReg [0xA6, 0x0] 0x0 zeroFlag mkTestCPU "Load X Register - ZeroPage"
+    loadXReg [0xA6, 0x0] 0xFF negFlag mkTestCPU "Load X Register - ZeroPage"
 
 loadXRegZeroPageY :: TestTree
 loadXRegZeroPageY = loadXReg [0xB6, 0x7F]
-                             0x8F
-                             negFlag
+                             0x70
+                             0x0
                              cpu
                              "Load X Register - ZeroPageY"
     where cpu = mkTestCPU { yReg = Reg 0x10 }
@@ -243,12 +243,12 @@ loadYRegImmediate =
 
 loadYRegZeroPage :: TestTree
 loadYRegZeroPage =
-    loadYReg [0xA4, 0x0] 0x0 zeroFlag mkTestCPU "Load Y Register - ZeroPage"
+    loadYReg [0xA4, 0x0] 0xFF negFlag mkTestCPU "Load Y Register - ZeroPage"
 
 loadYRegZeroPageX :: TestTree
 loadYRegZeroPageX = loadYReg [0xB4, 0x7F]
-                             0x8F
-                             negFlag
+                             0x70
+                             0x0
                              cpu
                              "Load Y Register - ZeroPageX"
     where cpu = mkTestCPU { xReg = Reg 0x10 }

@@ -1,3 +1,4 @@
+import           ADCTest
 import           LoadStoreTest
 import           LogicalTest
 import           StackTest
@@ -8,4 +9,4 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Full" [loadStore, transfer, stackOps, logical]
+tests = testGroup "Full" [loadStore, transfer, stackOps, logical, adcCarry]

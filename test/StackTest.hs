@@ -6,7 +6,6 @@ module StackTest
 
 import           Control.Monad.RWS.Strict       ( runRWST )
 import qualified Data.Array.IArray             as IA
-import           Emulator
 import           Execution                      ( execute )
 import           Flags                          ( negFlag
                                                 , zeroFlag
@@ -18,6 +17,7 @@ import           Test.Tasty.HUnit               ( (@=?)
                                                 , testCase
                                                 )
 import           TestUtils                      ( mkTestCPU )
+import           Types
 
 
 stackOps :: TestTree

@@ -9,7 +9,7 @@ module TestUtils
 import           Data.Array.IArray              ( (//)
                                                 , listArray
                                                 )
-import           Emulator                       ( Byte
+import           Types                          ( Byte
                                                 , CPU(..)
                                                 , Flags(Flags)
                                                 , Memory
@@ -35,7 +35,7 @@ mkTestCPU = CPU { .. }
 -- Set the ZeroPage to have useful information
 setTestZeroPage :: Memory -> Memory
 setTestZeroPage mem =
-    let zp = [ (ix, fromIntegral ix) | ix <- [0 .. 0xFF] ] in mem // zp
+    let zp = [ (ix, 0xFF - fromIntegral ix) | ix <- [0 .. 0xFF] ] in mem // zp
 
 setProgramMemory :: [Byte] -> CPU -> CPU
 setProgramMemory bytes c@CPU {..} =
