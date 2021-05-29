@@ -1,4 +1,4 @@
--- | Display Contents of CPU and Memory
+-- | Display Contents of CPUState and Memory
 module Display
     ( showXReg
     , showYReg
@@ -12,25 +12,25 @@ import qualified Data.Array.IArray             as IA
 import           Numeric                        ( showHex )
 import           Types
 
-showCPUValue :: Display a => (CPU -> a) -> CPU -> String
-showCPUValue v = display . v
+showCPUStateValue :: Display a => (CPUState -> a) -> CPUState -> String
+showCPUStateValue v = display . v
 
-showXReg :: CPU -> String
-showXReg = showCPUValue xReg
+showXReg :: CPUState -> String
+showXReg = showCPUStateValue xReg
 
-showYReg :: CPU -> String
-showYReg = showCPUValue yReg
+showYReg :: CPUState -> String
+showYReg = showCPUStateValue yReg
 
-showAReg :: CPU -> String
-showAReg = showCPUValue aReg
+showAReg :: CPUState -> String
+showAReg = showCPUStateValue aReg
 
-showPC :: CPU -> String
-showPC = showCPUValue pc
+showPC :: CPUState -> String
+showPC = showCPUStateValue pc
 
-showSP :: CPU -> String
-showSP = showCPUValue sp
+showSP :: CPUState -> String
+showSP = showCPUStateValue sp
 
-showNBytes :: Address -> Offset -> CPU -> [String]
+showNBytes :: Address -> Offset -> CPUState -> [String]
 showNBytes addr offset CPU {..} =
     [ showHex i "" <> ": " <> showHex (memory IA.! i) ""
     | i <- [addr .. (addr + offset)]

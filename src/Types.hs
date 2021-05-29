@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Types
     ( Emulator
     , Byte
@@ -10,42 +12,38 @@ module Types
     , Register(..)
     , Flags(..)
     , FlagType(..)
-    , CPU(..)
     , CPUState(..)
-    , CPUErrorType(..)
+    , Config(..)
     , Instruction(..)
     , AddressType(..)
     , OpCode(..)
     , OpName(..)
+    , Operand(..)
     , OperandType(..)
-    ,
+    , StoreLoc(..)
+    , RegisterType(..)
     -- Constructors
-      mkCPU
-    ,
-    -- functions
-      setMemory
-    , setProgramCounter
-    , setStackPointer
-    , setXRegister
-    , setYRegister
-    , setARegister
-    , setFRegister
+    , mkCPU
     ) where
 
 import           Control.Monad.RWS.Strict       ( RWST )
-import qualified Data.Array.IArray             as IA
+import           Control.Monad.Reader           ( MonadReader
+                                                , ReaderT
+                                                )
+import           Control.Monad.ST.Strict        ( ST )
+import           Data.Array.IArray             as IA
 import           Data.Array.Unboxed             ( UArray
                                                 , listArray
                                                 )
 import           Data.Bits                      ( Bits )
 import           Data.Generics.Labels           ( )
+import           Data.STRef.Strict              ( STRef )
+import qualified Data.Vector.Unboxed.Mutable   as UVM
 import           Data.Word                      ( Word16
                                                 , Word8
                                                 )
 import           GHC.Generics                   ( Generic )
 import           Lens.Micro                     ( LensLike )
-import           Lens.Micro.Mtl
-import           Lens.Micro.Type                ( Getting )
 import           Text.Printf                    ( printf )
 
 -- | Notes on 6502 emulator:
@@ -71,7 +69,7 @@ import           Text.Printf                    ( printf )
 --     - Negative Flag: 0x80 -> set if last operation had bit 7 set to 1
 
 -- A fully RESET CPU
-mkCPU :: CPU
+mkCPU :: CPUState
 mkCPU = CPU { .. }
   where
     memory = listArray (0, 0xFFFF) (repeat 0) -- Array of 64kb init to 0
@@ -83,21 +81,31 @@ mkCPU = CPU { .. }
     fReg   = Flags 0x0
 
 type Byte = Word8
-
 type Address = Word16
-
 type Offset = Word16
 
--- main monad for execution
--- Reader/Writer are unused as of now
-type Emulator = RWST [String] [String] CPU IO
 
 -- Memory has 16 bit Addresses and 8 bit elements
 -- Memory is 64Kb ~ 1024 * 64
 type Memory = UArray Address Byte
 
 -- alias for a Register Lens
-type RegisterName = (LensLike ((,) Register) CPU CPU Register Register)
+type RegisterName
+    = (LensLike ((,) Register) CPUState CPUState Register Register)
+
+-- main monad for execution
+type Emulator = RWST [String] [String] CPUState IO
+
+
+data EmulatorApp s = EmulatorApp
+    { cpuState :: CPUState
+    , config   :: Config
+    }
+
+data Config = Config
+    { logEnabled  :: Bool
+    , logLocation :: FilePath
+    }
 
 data FlagType = CF | ZF | IF | DF | BF | OF | NF
   deriving (Eq, Show)
@@ -118,64 +126,47 @@ newtype Flags = Flags {getFlags :: Byte}
   deriving stock (Eq, Generic, Show)
   deriving (Num, Bits) via Word8
 
-
--- State of the Underlying CPU
-data CPUState
-  = Running
-  | Stopped
-  | CPUError CPUErrorType
-  deriving (Eq, Show)
-
-data CPUErrorType = StackOverflow
-                  | StackUnderflow
-                  deriving(Eq, Show)
-
-data CPU = CPU
-    { -- Memory of 6502 - 64Kb
-      memory :: Memory
-    ,
-    -- Program Counter (16 bits)
-      pc     :: ProgramCounter
-    ,
-    -- Stack Pointer (8 bits)
-      sp     :: StackPointer
-    ,
-    -- X Register
-      xReg   :: Register
-    ,
-    -- Y Register
-      yReg   :: Register
-    ,
-    -- Accumulator Register
-      aReg   :: Register
-    ,
-    -- 7 bits denote flags
-      fReg   :: Flags
+data CPUState = CPU
+    { memory :: Memory                -- Memory of 6502 - 64Kb
+    , pc     :: ProgramCounter  -- Program Counter (16 bits)
+    , sp     :: StackPointer    -- Stack Pointer (16 bits)
+    , xReg   :: Register        -- X Register
+    , yReg   :: Register        -- Y Register
+    , aReg   :: Register        -- Accumulator Register
+    , fReg   :: Flags           -- 7 bits denote flags
     }
-    deriving (Eq, Generic)
-
-instance Show CPU where
-    show cpu =
-        "CPU{ "
-            <> "Program Counter="
-            <> show (pc cpu)
-            <> "Stack Pointer="
-            <> show (sp cpu)
-            <> "A Register="
-            <> show (aReg cpu)
-            <> "X Register="
-            <> show (xReg cpu)
-            <> "Y Register="
-            <> show (yReg cpu)
-            <> "}"
+    deriving Generic
 
 -- We decode instructions into this form
-data Instruction = Instruction OpCode OperandType
+data Instruction = Instruction OpCode Operand
     deriving Eq
 
 instance Show Instruction where
-    show (Instruction (OpCode hex op addr) _) =
-        printf "%x - %s - %s" hex (show op) (show addr)
+    show (Instruction (OpCode op addr) oper) =
+        printf "%s - %s - %s" (show op) (show addr) (show oper)
+
+data Operand = Operand OperandType StoreLoc
+    deriving (Eq, Show)
+
+data OperandType = OpTMemory Address
+                 | OpTValue Byte
+                 | OpTEmpty
+                 deriving (Eq, Show)
+
+data StoreLoc
+  = MemorySL Address
+  | RegisterSL RegisterType
+  | StackPointerSL
+  | ProgramCounterSL Address
+  | NoStore
+  deriving (Eq, Show)
+
+data RegisterType = AReg | XReg | YReg | FReg
+  deriving (Eq, Show)
+
+-- encodes a byte into an OpCode
+data OpCode = OpCode OpName AddressType
+    deriving (Eq, Show)
 
 -- 6502 has 8 distinct addressing modes
 data AddressType
@@ -195,8 +186,6 @@ data AddressType
   deriving (Eq, Show)
 
 -- Where the operand of instruction comes from
-data OperandType = OpTMemory Address | OpTValue Byte | OpTEmpty
-  deriving (Eq, Show)
 
 -- Instruction Mnemonics
 data OpName
@@ -257,34 +246,3 @@ data OpName
   | NOP
   | RTI -- System Ops
   deriving (Eq, Show)
-
--- encodes a byte into an OpCode
-data OpCode = OpCode Byte OpName AddressType
-    deriving (Eq, Show)
-
--- set a range of addresses with byte values
-setMemory :: Address -> [Byte] -> Emulator ()
-setMemory addr bytes = do
-    let replace =
-            [ (addr + fromIntegral i, bytes !! i)
-            | i <- [0 .. (length bytes - 1)]
-            ]
-    #memory %= (\m -> m IA.// replace)
-
-setStackPointer :: Address -> Emulator ()
-setStackPointer addr = #sp .= SP addr
-
-setProgramCounter :: Address -> Emulator ()
-setProgramCounter addr = #pc .= PC addr
-
-setARegister :: Byte -> Emulator ()
-setARegister byte = #aReg .= Reg byte
-
-setXRegister :: Byte -> Emulator ()
-setXRegister byte = #xReg .= Reg byte
-
-setYRegister :: Byte -> Emulator ()
-setYRegister byte = #yReg .= Reg byte
-
-setFRegister :: Byte -> Emulator ()
-setFRegister byte = #fReg .= Flags byte

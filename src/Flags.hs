@@ -2,7 +2,11 @@
 module Flags
     (
     -- functions
-      updateFlag
+      setFRegister
+    , getFRegister
+    , setFlag
+    , clearFlag
+    , updateFlag
     , isFlagSet
     , isNegative
     , isOverflow
@@ -63,15 +67,27 @@ toBitNum = \case
     NF -> 7
 
 
-setFlag :: FlagType -> Flags -> Flags
-setFlag ft flags = flags .|. toBitRep ft
+getFRegister :: Emulator Byte
+getFRegister = getFlags <$> use #fReg
 
-clearFlag :: FlagType -> Flags -> Flags
-clearFlag ft flags = flags .&. complement (toBitRep ft)
+setFRegister :: Byte -> Emulator ()
+setFRegister byte = #fReg .= Flags byte
 
-updateFlag :: Bool -> FlagType -> Flags -> Flags
-updateFlag True  = setFlag
-updateFlag False = clearFlag
+setFlag :: FlagType -> Emulator ()
+setFlag ft = #fReg %= \flags -> flags .|. toBitRep ft
+
+clearFlag :: FlagType -> Emulator ()
+clearFlag ft = #fReg %= \flags -> flags .&. complement (toBitRep ft)
+
+setFlag' :: FlagType -> Flags -> Flags
+setFlag' ft flags = flags .|. toBitRep ft
+
+clearFlag' :: FlagType -> Flags -> Flags
+clearFlag' ft flags = flags .&. complement (toBitRep ft)
+
+updateFlag :: Bool -> FlagType -> Emulator ()
+updateFlag True  ft = #fReg %= setFlag' ft
+updateFlag False ft = #fReg %= clearFlag' ft
 
 isFlagSet :: FlagType -> Emulator Bool
 isFlagSet fType =
@@ -80,12 +96,8 @@ isFlagSet fType =
 isFlagSet' :: Flags -> Int -> Bool
 isFlagSet' = testBit
 
-{-
-Boolean Operations for checking whether to set a bit or not in Flags.
-
-Generally used in conjuction with `updateFlag`.
-
--}
+-- Boolean Operations for checking whether to set a bit or not in Flags.
+-- Generally used in conjuction with `updateFlag`.
 
 -- check if result is negative (7th bit)
 isNegative :: Byte -> Bool

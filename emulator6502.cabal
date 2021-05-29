@@ -21,14 +21,17 @@ source-repository head
 
 library
   exposed-modules:
+      Decode
       Display
-      Types
       Execution
       Flags
       Instruction
-      Decode
-      Stack
+      Memory
       ProgramCounter
+      Register
+      Stack
+      Types
+      Utils
   other-modules:
       Paths_emulator6502
   hs-source-dirs:

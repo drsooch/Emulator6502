@@ -2,10 +2,25 @@
 
 module ProgramCounter
     ( incrementPC
+    , setProgramCounter
+    , getProgramCounter
+    , offsetProgramCounter
     ) where
 
-import           Lens.Micro.Mtl                 ( (%=) )
-import           Types                          ( Emulator )
+import           Lens.Micro.Mtl                 ( (%=)
+                                                , (.=)
+                                                , use
+                                                )
+import           Types
 
-incrementPC :: Int -> Emulator ()
-incrementPC num = #pc %= (+) (1 + fromIntegral num)
+offsetProgramCounter :: (Integral a, Num a) => a -> Emulator ()
+offsetProgramCounter offset = #pc %= \pc -> pc + fromIntegral offset
+
+getProgramCounter :: Emulator Address
+getProgramCounter = getPC <$> use #pc
+
+setProgramCounter :: Address -> Emulator ()
+setProgramCounter addr = #pc .= PC addr
+
+incrementPC :: (Integral a) => a -> Emulator ()
+incrementPC num = #pc %= \pc -> pc + 1 + fromIntegral num
