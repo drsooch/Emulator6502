@@ -24,13 +24,13 @@ getStackPointer = getSP <$> use #sp
 setStackPointer :: Byte -> Emulator ()
 setStackPointer val = #sp .= SP (0x100 + fromIntegral val)
 
--- this allows for wrapping on the stack i.e. 0x1FF + push = 0x100
+-- this allows for wrapping on the stack i.e. 0x1FF + pop = 0x100
 incrementSP :: Emulator ()
 incrementSP = getStackPointer >>= setStackPointer . (+) 1 . fromIntegral
 
--- this allows for wrapping on the stack i.e. 0x100 + pull/pop = 0x1FF
+-- this allows for wrapping on the stack i.e. 0x100 + push = 0x1FF
 decrementSP :: Emulator ()
-decrementSP = getStackPointer >>= setStackPointer . (-) 1 . fromIntegral
+decrementSP = getStackPointer >>= setStackPointer . flip (-) 1 . fromIntegral
 
 -- pop value from stack and increment pointer
 popStackByte :: Emulator Byte

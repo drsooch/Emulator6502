@@ -2,3 +2,7 @@
 *~
 dist-newstyle/*
 .hie/*
+log/*
+.projectile
+
+stan.*

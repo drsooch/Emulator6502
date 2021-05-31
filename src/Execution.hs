@@ -1,18 +1,14 @@
 {-# LANGUAGE RankNTypes #-}
 module Execution
     ( runEmulator
-    , hardResetCPU
     , execute
     ) where
 
-import           Config
 import           Control.Monad                  ( unless
+                                                , void
                                                 , when
                                                 )
-import           Control.Monad.RWS.Strict       ( RWST(runRWST)
-                                                , void
-                                                )
-import qualified Data.Array.IArray             as IA
+import           Control.Monad.State.Strict     ( runStateT )
 import           Data.Bits                      ( (.&.)
                                                 , (.|.)
                                                 , testBit
@@ -22,6 +18,7 @@ import           Data.Bool                      ( bool )
 import           Decode
 import           Flags
 import           Instruction
+import           Logging
 import           Memory
 import           ProgramCounter
 import           Register
@@ -29,23 +26,12 @@ import           Stack
 import           Types
 import           Utils
 
--- full "factory" reset
-hardResetCPU :: CPUState -> CPUState
-hardResetCPU _ = cpu { memory = mem' }
-  where
-    cpu  = mkCPU
-    mem  = memory cpu
-    mem' = mem IA.// [(0xFFFC, 0xA9), (0xFFFD, 57)]
-
--- -- resets everything but memory
--- softResetCPU :: CPU -> CPU
--- softResetCPU CPU {..} = let c = mkCPU in c { memory = memory }
-
-runEmulator :: CPUState -> IO ((), CPUState, [String])
-runEmulator = runRWST (void execute) []
+runEmulator :: CPUState -> IO ((), CPUState)
+runEmulator = runStateT (void execute)
 
 execute :: Emulator ()
-execute = decodeInstruction >>= executeInstruction
+execute = logCPUState >> decodeInstruction >>= \inst ->
+    logInstruction inst >> executeInstruction inst >> logCPUState
 
 executeInstruction :: Instruction -> Emulator ()
 executeInstruction inst@(Instruction (OpCode opName _) operand) =

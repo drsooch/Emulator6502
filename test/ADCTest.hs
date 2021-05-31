@@ -7,15 +7,14 @@ module ADCTest
 import           Control.Monad.RWS.Strict       ( )
 import           Data.Foldable                  ( foldl' )
 import           Data.Word                      ( Word16 )
-import           Execution                      ( )
-import           Flags                          ( isCarryAdd )
+import           Flags
 import           Test.Tasty                     ( TestTree
                                                 , testGroup
                                                 )
 import           Test.Tasty.HUnit               ( assertBool
                                                 , testCase
                                                 )
-import           Types                          ( Byte )
+import           Types
 
 adder :: TestTree
 adder = testGroup "ADC Operations" []

@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 module Types
     ( Emulator
     , Byte
@@ -13,7 +11,6 @@ module Types
     , Flags(..)
     , FlagType(..)
     , CPUState(..)
-    , Config(..)
     , Instruction(..)
     , AddressType(..)
     , OpCode(..)
@@ -26,24 +23,17 @@ module Types
     , mkCPU
     ) where
 
-import           Control.Monad.RWS.Strict       ( RWST )
-import           Control.Monad.Reader           ( MonadReader
-                                                , ReaderT
-                                                )
-import           Control.Monad.ST.Strict        ( ST )
+import           Control.Monad.State.Strict     ( StateT )
 import           Data.Array.IArray             as IA
-import           Data.Array.Unboxed             ( UArray
-                                                , listArray
-                                                )
+import           Data.Array.Unboxed             ( UArray )
 import           Data.Bits                      ( Bits )
 import           Data.Generics.Labels           ( )
-import           Data.STRef.Strict              ( STRef )
-import qualified Data.Vector.Unboxed.Mutable   as UVM
 import           Data.Word                      ( Word16
                                                 , Word8
                                                 )
 import           GHC.Generics                   ( Generic )
 import           Lens.Micro                     ( LensLike )
+import           System.IO                      ( Handle )
 import           Text.Printf                    ( printf )
 
 -- | Notes on 6502 emulator:
@@ -69,8 +59,8 @@ import           Text.Printf                    ( printf )
 --     - Negative Flag: 0x80 -> set if last operation had bit 7 set to 1
 
 -- A fully RESET CPU
-mkCPU :: CPUState
-mkCPU = CPU { .. }
+mkCPU :: Bool -> Handle -> CPUState
+mkCPU logEnabled logLocation = CPU { .. }
   where
     memory = listArray (0, 0xFFFF) (repeat 0) -- Array of 64kb init to 0
     pc     = PC 0xFFFC
@@ -94,18 +84,9 @@ type RegisterName
     = (LensLike ((,) Register) CPUState CPUState Register Register)
 
 -- main monad for execution
-type Emulator = RWST [String] [String] CPUState IO
+type Emulator = StateT CPUState IO
 
 
-data EmulatorApp s = EmulatorApp
-    { cpuState :: CPUState
-    , config   :: Config
-    }
-
-data Config = Config
-    { logEnabled  :: Bool
-    , logLocation :: FilePath
-    }
 
 data FlagType = CF | ZF | IF | DF | BF | OF | NF
   deriving (Eq, Show)
@@ -127,13 +108,15 @@ newtype Flags = Flags {getFlags :: Byte}
   deriving (Num, Bits) via Word8
 
 data CPUState = CPU
-    { memory :: Memory                -- Memory of 6502 - 64Kb
-    , pc     :: ProgramCounter  -- Program Counter (16 bits)
-    , sp     :: StackPointer    -- Stack Pointer (16 bits)
-    , xReg   :: Register        -- X Register
-    , yReg   :: Register        -- Y Register
-    , aReg   :: Register        -- Accumulator Register
-    , fReg   :: Flags           -- 7 bits denote flags
+    { memory      :: Memory          -- Memory of 6502 - 64Kb
+    , pc          :: ProgramCounter  -- Program Counter (16 bits)
+    , sp          :: StackPointer    -- Stack Pointer (16 bits)
+    , xReg        :: Register        -- X Register
+    , yReg        :: Register        -- Y Register
+    , aReg        :: Register        -- Accumulator Register
+    , fReg        :: Flags           -- 7 bits denote flags
+    , logEnabled  :: Bool
+    , logLocation :: Handle
     }
     deriving Generic
 

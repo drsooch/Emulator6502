@@ -4,18 +4,16 @@ module SBCTest
     ( sbcCarry
     ) where
 
-import           Control.Monad.RWS.Strict       ( )
 import           Data.Foldable                  ( foldl' )
 import           Data.Word                      ( Word16 )
-import           Execution                      ( )
-import           Flags                          ( isCarrySub )
+import           Flags
 import           Test.Tasty                     ( TestTree
                                                 , testGroup
                                                 )
 import           Test.Tasty.HUnit               ( assertBool
                                                 , testCase
                                                 )
-import           Types                          ( Byte )
+import           Types
 
 subber :: TestTree
 subber = testGroup "ADC Operations" []

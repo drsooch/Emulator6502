@@ -26,6 +26,7 @@ library
       Execution
       Flags
       Instruction
+      Logging
       Memory
       ProgramCounter
       Register
@@ -41,10 +42,12 @@ library
   build-depends:
       array
     , base >=4.14 && <5
+    , directory
     , generic-lens
     , microlens
     , microlens-mtl
     , mtl
+    , unix
   default-language: Haskell2010
 
 executable emulator6502-exe
@@ -58,11 +61,13 @@ executable emulator6502-exe
   build-depends:
       array
     , base >=4.14 && <5
+    , directory
     , emulator6502
     , generic-lens
     , microlens
     , microlens-mtl
     , mtl
+    , unix
   default-language: Haskell2010
 
 test-suite emulator6502-test
@@ -83,6 +88,7 @@ test-suite emulator6502-test
   build-depends:
       array
     , base >=4.14 && <5
+    , directory
     , emulator6502
     , generic-lens
     , microlens
@@ -90,4 +96,5 @@ test-suite emulator6502-test
     , mtl
     , tasty
     , tasty-hunit
+    , unix
   default-language: Haskell2010
