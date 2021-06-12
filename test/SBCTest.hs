@@ -2,6 +2,8 @@
 
 module SBCTest
     ( sbcCarry
+    , subber
+    , sbcOverflow
     ) where
 
 import           Data.Foldable                  ( foldl' )

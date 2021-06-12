@@ -2,6 +2,8 @@
 
 module ADCTest
     ( adcCarry
+    , adder
+    , adcOverflow
     ) where
 
 import           Control.Monad.RWS.Strict       ( )
