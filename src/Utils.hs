@@ -8,11 +8,13 @@ module Utils
     , fetchAddress
     , toAddress
     , fromAddress
+    , boolToByte
     ) where
 
 import qualified Data.Array.IArray             as IA
 import qualified Data.Bits                     as B
 import           Lens.Micro.Mtl                 ( use )
+import           Logging
 import           Types
 
 -- We have to do this so we can use the proper signature in our Execution file
@@ -27,11 +29,13 @@ toByte :: Address -> Byte
 toByte = fromIntegral
 
 fetchByte :: Address -> Emulator Byte
-fetchByte addr = use #memory >>= \mem -> return $ mem IA.! addr
+fetchByte addr = logSingleMemoryLocation addr >> use #memory >>= \mem ->
+    return $ mem IA.! addr
 
 fetchAddress :: Address -> Emulator Address
 fetchAddress addr = do
     mem <- use #memory
+    logAddressInMemory addr
     return $ toAddress (mem IA.! addr) (mem IA.! (addr + 1))
 
 -- convert two bytes into a 2 byte address
@@ -42,3 +46,7 @@ toAddress lsb msb = (fromIntegral msb) `B.shiftL` 8 + fromIntegral lsb
 -- fromIntegral addr masks out top bits
 fromAddress :: Address -> (Byte, Byte)
 fromAddress addr = (fromIntegral addr, fromIntegral $ addr `B.shiftR` 8)
+
+boolToByte :: Bool -> Byte
+boolToByte True  = 1
+boolToByte False = 0

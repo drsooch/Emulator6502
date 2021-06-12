@@ -4,7 +4,6 @@ module Decode
     ( decodeInstruction
     , resolveOperand
     , storeValue
-    , boolToByte
     , applyOperation
     ) where
 
@@ -68,13 +67,16 @@ decodeOperand opc addrT bs = case (addrT, bs) of
         $ Operand (OpTValue b1) (decodeStoreLoc opc (OpTValue b1) addrT)
     (Implicit, _) ->
         return $ Operand OpTEmpty (decodeStoreLoc opc OpTEmpty addrT)
+    (Accumulator, _) ->
+        return $ Operand OpTAccumulator (decodeStoreLoc opc OpTEmpty addrT)
     (_, _) -> error "Invalid Operands"
 
-resolveOperand :: Operand -> Emulator Byte
+resolveOperand :: OperandType -> Emulator Byte
 resolveOperand op = case op of
-    (Operand (OpTValue  b   ) _) -> return b
-    (Operand (OpTMemory addr) _) -> fetchByte addr
-    _                            -> error "Invalid Operand"
+    (OpTValue  b   ) -> return b
+    (OpTMemory addr) -> fetchByte addr
+    OpTAccumulator   -> getARegister
+    OpTEmpty         -> return $ error "OpTEmpty is used..."
 
 -- decode an Instruction and grab the inputs based on AddressType
 decodeInstruction :: Emulator Instruction
@@ -88,12 +90,9 @@ decodeInstruction = do
     incrementPC (length ops)
     Instruction op <$> decodeOperand op addr ops
 
-boolToByte :: Bool -> Byte
-boolToByte True  = 1
-boolToByte False = 0
 
-applyOperation :: Operand -> (Byte -> Byte -> Byte) -> Byte -> Emulator Byte
-applyOperation op f val = case getStoreLoc op of
+applyOperation :: StoreLoc -> (Byte -> Byte -> Byte) -> Byte -> Emulator Byte
+applyOperation storeLoc f val = case storeLoc of
     (MemorySL   addr)    -> applyMemory addr f val
     (RegisterSL AReg)    -> applyARegister f val
     (RegisterSL XReg)    -> applyXRegister f val
@@ -104,8 +103,8 @@ applyOperation op f val = case getStoreLoc op of
     (ProgramCounterSL _) -> undefined
     NoStore              -> undefined
 
-storeValue :: Operand -> Byte -> Emulator ()
-storeValue op val = case getStoreLoc op of
+storeValue :: StoreLoc -> Byte -> Emulator ()
+storeValue storeLoc val = case storeLoc of
     (MemorySL   addr)       -> setMemory addr [val]
     (RegisterSL AReg)       -> void $ setARegister val
     (RegisterSL XReg)       -> void $ setXRegister val

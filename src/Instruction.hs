@@ -76,14 +76,14 @@ decodeStoreLoc opc opt mode = case (getOpName opc, mode, opt) of
     (JMP, _          , OpTMemory addr) -> ProgramCounterSL addr
     (JSR, _          , _             ) -> NoStore
     (RTS, _          , _             ) -> NoStore
-    (BCC, _          , _             ) -> NoStore
-    (BCS, _          , _             ) -> NoStore
-    (BEQ, _          , _             ) -> NoStore
-    (BMI, _          , _             ) -> NoStore
-    (BNE, _          , _             ) -> NoStore
-    (BPL, _          , _             ) -> NoStore
-    (BVC, _          , _             ) -> NoStore
-    (BVS, _          , _             ) -> NoStore
+    (BCC, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BCS, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BEQ, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BMI, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BNE, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BPL, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BVC, _          , OpTMemory addr) -> ProgramCounterSL addr
+    (BVS, _          , OpTMemory addr) -> ProgramCounterSL addr
     (CLC, _          , _             ) -> NoStore
     (CLD, _          , _             ) -> NoStore
     (CLI, _          , _             ) -> NoStore

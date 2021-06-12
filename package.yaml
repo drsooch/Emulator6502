@@ -16,10 +16,15 @@ description:         Please see the README on GitHub at <https://github.com/drso
 dependencies:
 - base >= 4.7 && < 5
 - array
-- mtl
+- directory
 - generic-lens
+- megaparsec
+- mtl
 - microlens
 - microlens-mtl
+- pretty
+- text
+- unix
 
 default-extensions:
 - RecordWildCards
@@ -30,6 +35,7 @@ default-extensions:
 - DeriveGeneric
 - TypeApplications
 - OverloadedLabels
+- OverloadedStrings
 - DataKinds
 - AllowAmbiguousTypes
 - MultiWayIf
@@ -59,5 +65,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - emulator6502
+    - QuickCheck
     - tasty
     - tasty-hunit
+    - tasty-quickcheck

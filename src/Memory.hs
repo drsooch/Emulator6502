@@ -30,6 +30,7 @@ setMemory addr bytes = do
             ]
     #memory %= \m -> m IA.// replace
 
+
 -- apply a function to a memory location and store the result in the same spot
 applyMemory :: Address -> (Byte -> Byte -> Byte) -> Byte -> Emulator Byte
 applyMemory addr f byte = do

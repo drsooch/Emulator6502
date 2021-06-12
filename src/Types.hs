@@ -133,6 +133,7 @@ data Operand = Operand OperandType StoreLoc
 
 data OperandType = OpTMemory Address
                  | OpTValue Byte
+                 | OpTAccumulator
                  | OpTEmpty
                  deriving (Eq, Show)
 

@@ -8,6 +8,7 @@ module Flags
     , clearFlag
     , updateFlag
     , isFlagSet
+    , isFlagSet'
     , isNegative
     , isOverflow
     , isZero
@@ -40,11 +41,11 @@ carryFlag, zeroFlag, intFlag, decFlag, brkFlag, ovFlag, negFlag
     :: (Num a, Bits a) => a
 carryFlag = 0x1
 zeroFlag = 0x2
-intFlag = 0x8
-decFlag = 0x10
-brkFlag = 0x20
-ovFlag = 0x40
-negFlag = 0x80
+intFlag = 0x4
+decFlag = 0x8
+brkFlag = 0x10
+ovFlag = 0x20
+negFlag = 0x40
 
 toBitRep :: (Num a, Bits a) => FlagType -> a
 toBitRep = \case
@@ -58,13 +59,13 @@ toBitRep = \case
 
 toBitNum :: FlagType -> Int
 toBitNum = \case
-    CF -> 1
-    ZF -> 2
-    IF -> 3
-    DF -> 4
-    BF -> 5
-    OF -> 6
-    NF -> 7
+    CF -> 0
+    ZF -> 1
+    IF -> 2
+    DF -> 3
+    BF -> 4
+    OF -> 5
+    NF -> 6
 
 
 getFRegister :: Emulator Byte
@@ -90,11 +91,10 @@ updateFlag True  ft = #fReg %= setFlag' ft
 updateFlag False ft = #fReg %= clearFlag' ft
 
 isFlagSet :: FlagType -> Emulator Bool
-isFlagSet fType =
-    use #fReg >>= \flags -> return $ isFlagSet' flags (toBitNum fType)
+isFlagSet fType = use #fReg >>= \flags -> return $ isFlagSet' flags fType
 
-isFlagSet' :: Flags -> Int -> Bool
-isFlagSet' = testBit
+isFlagSet' :: Flags -> FlagType -> Bool
+isFlagSet' flags = testBit flags . toBitNum
 
 -- Boolean Operations for checking whether to set a bit or not in Flags.
 -- Generally used in conjuction with `updateFlag`.

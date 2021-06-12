@@ -49,11 +49,6 @@ applyRegister
 applyRegister reg f val = getReg <$> (reg <%= f (Reg val))
 
 applyARegister :: (Byte -> Byte -> Byte) -> Byte -> Emulator Byte
--- applyARegister f val = do
---     aReg <- getARegister
---     let result = aReg `f` val
---     setARegister result
- -- (#aReg <%= onRegister f (Reg val)) >> getARegister
 applyARegister f val = getReg <$> (#aReg <%= onRegister f (Reg val))
 
 

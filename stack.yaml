@@ -1,9 +1,20 @@
-resolver: lts-16.31
-
-ghc-options:
-    "$locals": -Wall
-    "$targets": -Werror
-    "$everything": -O2 -fwrite-ide-info -hiedir=.hie
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/17/14.yaml
 
 packages:
 - .
+# extra-deps:
+# - acme-missiles-0.3
+# - git: https://github.com/commercialhaskell/stack.git
+#   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
+#
+# extra-deps: []
+
+# Override default flag values for local packages and extra-deps
+# flags: {}
+
+# Extra package databases containing global packages
+# extra-package-dbs: []
+
+system-ghc: true
+

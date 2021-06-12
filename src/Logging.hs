@@ -10,6 +10,8 @@ module Logging
     , logStackPointer
     , logProgramCounter
     , logMemoryLocation
+    , logSingleMemoryLocation
+    , logAddressInMemory
     , logInstruction
     , logCPUState
     ) where
@@ -17,9 +19,8 @@ module Logging
 import           Control.Monad                  ( when )
 import           Control.Monad.State.Strict     ( MonadIO(liftIO)
                                                 , get
-                                                , gets
-                                                , void
                                                 )
+import qualified Data.Text.IO                  as TIO
 import           Display
 import           Lens.Micro.Mtl                 ( use )
 import           System.IO
@@ -31,7 +32,7 @@ closeLog cpu = do
     when isOpen $ hClose (logLocation cpu)
 
 writeLog :: Display a => a -> Emulator ()
-writeLog msg = use #logLocation >>= liftIO . flip hPutStrLn (display msg)
+writeLog msg = use #logLocation >>= liftIO . flip TIO.hPutStrLn (display msg)
 
 logARegister :: Emulator ()
 logARegister = use #aReg >>= writeLog
@@ -53,6 +54,12 @@ logProgramCounter = use #pc >>= writeLog
 
 logMemoryLocation :: Address -> Offset -> Emulator ()
 logMemoryLocation addr offset = get >>= mapM_ writeLog . showNBytes addr offset
+
+logSingleMemoryLocation :: Address -> Emulator ()
+logSingleMemoryLocation = flip logMemoryLocation 0
+
+logAddressInMemory :: Address -> Emulator ()
+logAddressInMemory = flip logMemoryLocation 1
 
 logInstruction :: Instruction -> Emulator ()
 logInstruction = writeLog

@@ -1,4 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
 module Execution
     ( runEmulator
     , execute
@@ -15,11 +14,11 @@ import           Data.Bits                      ( (.&.)
                                                 , xor
                                                 )
 import           Data.Bool                      ( bool )
+import           Data.Text                      ( pack )
 import           Decode
 import           Flags
 import           Instruction
 import           Logging
-import           Memory
 import           ProgramCounter
 import           Register
 import           Stack
@@ -34,8 +33,8 @@ execute = logCPUState >> decodeInstruction >>= \inst ->
     logInstruction inst >> executeInstruction inst >> logCPUState
 
 executeInstruction :: Instruction -> Emulator ()
-executeInstruction inst@(Instruction (OpCode opName _) operand) =
-    case opName of
+executeInstruction inst@(Instruction (OpCode opName _) operand@(Operand opT storeLoc))
+    = case opName of
         -- Load Ops
         LDA -> executeLoad inst
         LDX -> executeLoad inst
@@ -53,6 +52,7 @@ executeInstruction inst@(Instruction (OpCode opName _) operand) =
         TSX -> do
             val <- fromIntegral <$> getStackPointer
             updateFlag (isZero val)     ZF
+
             updateFlag (isNegative val) NF
             void $ setXRegister (fromIntegral val)
         TXS -> do
@@ -77,7 +77,7 @@ executeInstruction inst@(Instruction (OpCode opName _) operand) =
             -- Then set Negative Flag to bit 7 of OpValue
             -- Then set Overflow Flag to bit 6 of OpValue
             aVal  <- getARegister
-            opVal <- resolveOperand operand
+            opVal <- resolveOperand opT
             updateFlag (isZero (aVal .&. opVal)) ZF
             updateFlag (isNegative opVal)        NF
             updateFlag (testBit opVal 6)         OF  -- Not a fan of this
@@ -91,40 +91,43 @@ executeInstruction inst@(Instruction (OpCode opName _) operand) =
         CPX -> executeCompare inst
         CPY -> executeCompare inst
         -- Increment/Decrement Ops
-        INC -> executeIncOrDec (+) operand
-        INX -> executeIncOrDec (+) operand
-        INY -> executeIncOrDec (+) operand
-        DEC -> executeIncOrDec (-) operand
-        DEX -> executeIncOrDec (-) operand
-        DEY -> executeIncOrDec (-) operand
+        INC -> executeIncOrDec (+) storeLoc
+        INX -> executeIncOrDec (+) storeLoc
+        INY -> executeIncOrDec (+) storeLoc
+        DEC -> executeIncOrDec (-) storeLoc
+        DEX -> executeIncOrDec (-) storeLoc
+        DEY -> executeIncOrDec (-) storeLoc
         -- Shift Ops
         ASL -> do
             (unshift, result) <- executeShift shiftL operand
+            storeValue storeLoc result
             updateFlag (isNegative unshift) CF -- Carry Flag is set to bit 7 (same as isNegative)
             updateFlag (isZero result)      ZF
             updateFlag (isNegative result)  NF
         LSR -> do
             (unshift, result) <- executeShift shiftR operand
+            storeValue storeLoc result
             updateFlag (testBit unshift 0) CF -- CF is equal to bit Zero of unshifted
             updateFlag (isZero result)     ZF
             updateFlag (isNegative result) NF -- this should always be False
         ROL -> do
-            unrotated <- resolveOperand operand
+            unrotated <- resolveOperand opT
             carry     <- bool 0 1 <$> isFlagSet CF
             -- rotFn ignores second value as applyOperation is a binaryOp
             -- could also ignore first value also but whatever
-            let rotFn = \unrot _ -> unrot `shiftL` 1 .|. carry
-            result <- applyOperation operand rotFn 0
+            writeLog $ "Value of Carry: " <> pack (show carry)
+            let rotFn = \unrot _ -> (unrot `shiftL` 1) .|. carry
+            result <- applyOperation storeLoc rotFn 0
             updateFlag (isNegative unrotated) CF
             updateFlag (isZero result)        ZF
             updateFlag (isNegative result)    NF
         ROR -> do
-            unrotated <- resolveOperand operand
+            unrotated <- resolveOperand opT
             -- if carry is set we will set bit 7
             carry     <- bool 0 0x80 <$> isFlagSet CF
             -- see above
-            let rotFn = \unrot _ -> unrot `shiftR` 1 .|. carry
-            result <- applyOperation operand rotFn 0
+            let rotFn = \unrot _ -> (unrot `shiftR` 1) .|. carry
+            result <- applyOperation storeLoc rotFn 0
             updateFlag (testBit unrotated 0) CF
             updateFlag (isZero result)       ZF
             updateFlag (isNegative result)   NF
@@ -133,23 +136,22 @@ executeInstruction inst@(Instruction (OpCode opName _) operand) =
             -- the StoreLoc of Operand holds jump point
             -- requires a dummy byte val
             -- yuck.
-            storeValue operand 0
+            storeValue storeLoc 0
         JSR ->
             -- push current PC onto stack (minus one for some reason)
             -- TODO: figure out why
-            getProgramCounter >>= pushStackAddress . (-) 1
+            getProgramCounter >>= pushStackAddress . flip (-) 1
                -- see JMP not sure if there's even a point to adding and subtracting 1
         RTS -> popStackAddress >>= setProgramCounter . (+) 1
         -- Branch Ops
-        BCC -> isFlagSet CF >>= \flag -> unless flag $ executeBranch operand
-        BCS -> isFlagSet CF >>= \flag -> when flag $ executeBranch operand
-        BEQ -> isFlagSet ZF >>= \flag -> when flag $ executeBranch operand
-        BMI -> isFlagSet NF >>= \flag -> when flag $ executeBranch operand
-        BNE -> isFlagSet ZF >>= \flag -> unless flag $ executeBranch operand
-        BPL -> isFlagSet NF >>= \flag -> unless flag $ executeBranch operand
-        BVC -> isFlagSet OF >>= \flag -> unless flag $ executeBranch operand
-        BVS -> isFlagSet OF >>= \flag -> when flag $ executeBranch operand
-        -- Status Flag Ops
+        BCC -> isFlagSet CF >>= \flag -> unless flag $ storeValue storeLoc 0
+        BCS -> isFlagSet CF >>= \flag -> when flag $ storeValue storeLoc 0
+        BEQ -> isFlagSet ZF >>= \flag -> when flag $ storeValue storeLoc 0
+        BMI -> isFlagSet NF >>= \flag -> when flag $ storeValue storeLoc 0
+        BNE -> isFlagSet ZF >>= \flag -> unless flag $ storeValue storeLoc 0
+        BPL -> isFlagSet NF >>= \flag -> unless flag $ storeValue storeLoc 0
+        BVC -> isFlagSet OF >>= \flag -> unless flag $ storeValue storeLoc 0
+        BVS -> isFlagSet OF >>= \flag -> when flag $ storeValue storeLoc 0       -- Status Flag Ops
         CLC -> clearFlag CF
         CLD -> clearFlag DF
         CLI -> clearFlag IF
@@ -176,59 +178,48 @@ executeInstruction inst@(Instruction (OpCode opName _) operand) =
 
 -- | Execute one of: LDX | LDA | LDY
 executeLoad :: Instruction -> Emulator ()
-executeLoad (Instruction (OpCode opName _) ops) = do
-    loadVal <- resolveOperand ops
-    let setReg = case opName of
-            LDX -> setXRegister
-            LDY -> setYRegister
-            LDA -> setARegister
-            x   -> error $ show x
-    _ <- setReg loadVal
+executeLoad (Instruction _ (Operand opT storeLoc)) = do
+    loadVal <- resolveOperand opT
+    storeValue storeLoc loadVal
     updateFlag (isZero loadVal)     ZF
     updateFlag (isNegative loadVal) NF
 
 -- | Execute one of: STA | STX | STY
 executeStore :: Instruction -> Emulator ()
-executeStore (Instruction (OpCode opName _) operand) = do
+executeStore (Instruction (OpCode opName _) (Operand _ storeLoc)) = do
     regVal <- case opName of
         STA -> getARegister
         STX -> getXRegister
         STY -> getYRegister
         x   -> error $ show x
-    case getStoreLoc operand of
-        (MemorySL addr) -> setMemory addr [regVal]
-        _               -> error "Invalid store Location executeStore"
+    storeValue storeLoc regVal
 
 -- | Execute one of: TAX | TAY | TXA | TYA
 executeTransfer :: Instruction -> Emulator ()
-executeTransfer (Instruction (OpCode opName _) _) = do
-    let
-        (fromReg, toReg) = case opName of
-            TAX -> (getARegister, setXRegister)
-            TAY -> (getARegister, setYRegister)
-            TXA -> (getXRegister, setARegister)
-            TYA -> (getYRegister, setARegister)
-            invalid ->
-                error
-                    $  "Invalid instruction in executeTransfer: "
-                    <> show invalid
-    val <- fromReg
+executeTransfer (Instruction (OpCode opName _) (Operand _ storeLoc)) = do
+    val <- case opName of
+        TAX -> getARegister
+        TAY -> getARegister
+        TXA -> getXRegister
+        TYA -> getYRegister
+        invalid ->
+            error $ "Invalid instruction in executeTransfer: " <> show invalid
+    storeValue storeLoc val
     updateFlag (isZero val)     ZF
     updateFlag (isNegative val) NF
-    void $ toReg val
 
 -- | Execute one of: AND | EOR | ORA
 executeLogicalOp :: Instruction -> (Byte -> Byte -> Byte) -> Emulator ()
-executeLogicalOp (Instruction _ opt) logOp = do
-    result <- resolveOperand opt >>= applyARegister logOp
+executeLogicalOp (Instruction _ (Operand opT _)) logOp = do
+    result <- resolveOperand opT >>= applyARegister logOp
     updateFlag (isZero result)     ZF
     updateFlag (isNegative result) NF
 
 -- | Execute ADC with DF clear
 addBinary :: Instruction -> Emulator ()
-addBinary (Instruction _ opt) = do
+addBinary (Instruction _ (Operand opT _)) = do
     aVal   <- getARegister
-    adder  <- resolveOperand opt
+    adder  <- resolveOperand opT
     carry  <- boolToByte <$> isFlagSet CF
     result <- setARegister (aVal + adder + carry)
     updateFlag (isZero result)                ZF
@@ -238,9 +229,9 @@ addBinary (Instruction _ opt) = do
 
 -- | Execute SBC with DF clear
 subBinary :: Instruction -> Emulator ()
-subBinary (Instruction _ opt) = do
+subBinary (Instruction _ (Operand opT _)) = do
     aVal   <- getARegister
-    subber <- resolveOperand opt
+    subber <- resolveOperand opT
     carry  <- boolToByte . not <$> isFlagSet CF
     result <- setARegister (aVal - subber - carry)
     updateFlag (isZero result)                 ZF
@@ -250,9 +241,9 @@ subBinary (Instruction _ opt) = do
 
 -- | Execute ADC with DF set
 addDecimal :: Instruction -> Emulator ()
-addDecimal (Instruction _ opt) = do
+addDecimal (Instruction _ (Operand opT _)) = do
     aVal  <- getARegister
-    adder <- resolveOperand opt
+    adder <- resolveOperand opT
     carry <- boolToByte <$> isFlagSet CF
     let (bcdCarry, result) = computeBCDAdd aVal adder carry
     void $ setARegister result
@@ -277,9 +268,9 @@ computeBCDAdd acc adder carry =
 
 -- | Execute SBC with DF set
 subDecimal :: Instruction -> Emulator ()
-subDecimal (Instruction _ opt) = do
+subDecimal (Instruction _ (Operand opT _)) = do
     aVal   <- getARegister
-    subber <- resolveOperand opt
+    subber <- resolveOperand opT
     carry  <- boolToByte . not <$> isFlagSet CF
     let (bcdCarry, result) = computeBCDSub aVal subber carry
     void $ setARegister result
@@ -307,8 +298,8 @@ computeBCDSub acc subber carry =
 
 -- | Execute one of: CMP | CPY | CPX
 executeCompare :: Instruction -> Emulator ()
-executeCompare (Instruction opCode opt) =
-    executeCompare' opt =<< case getOpName opCode of
+executeCompare (Instruction opCode (Operand opT _)) =
+    executeCompare' opT =<< case getOpName opCode of
         CMP -> getARegister
         CPY -> getYRegister
         CPX -> getXRegister
@@ -317,26 +308,21 @@ executeCompare (Instruction opCode opt) =
                 $  "Invalid instruction called with executeCompare: "
                 <> show invalid
 
-executeCompare' :: Operand -> Byte -> Emulator ()
-executeCompare' opt regVal = do
-    cmpVal <- resolveOperand opt
+executeCompare' :: OperandType -> Byte -> Emulator ()
+executeCompare' opT regVal = do
+    cmpVal <- resolveOperand opT
     updateFlag (regVal >= cmpVal)             CF
     updateFlag (regVal == cmpVal)             ZF
     updateFlag (isNegative $ regVal - cmpVal) NF
 
-executeIncOrDec :: (Byte -> Byte -> Byte) -> Operand -> Emulator ()
-executeIncOrDec binOp operand = do
-    result <- applyOperation operand binOp 1
+executeIncOrDec :: (Byte -> Byte -> Byte) -> StoreLoc -> Emulator ()
+executeIncOrDec binOp storeLoc = do
+    result <- applyOperation storeLoc binOp 1
     updateFlag (isZero result)     ZF
     updateFlag (isNegative result) NF
 
 executeShift :: (Byte -> Byte -> Byte) -> Operand -> Emulator (Byte, Byte)
-executeShift shiftOp operand = do
-    unshifted <- resolveOperand operand
-    result    <- applyOperation operand shiftOp 1
+executeShift shiftOp (Operand opT storeLoc) = do
+    unshifted <- resolveOperand opT
+    result    <- applyOperation storeLoc shiftOp 1
     return (unshifted, result)
-
-executeBranch :: Operand -> Emulator ()
-executeBranch operand = do
-    offset <- resolveOperand operand
-    offsetProgramCounter offset

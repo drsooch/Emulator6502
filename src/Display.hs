@@ -1,4 +1,5 @@
 -- | Display Contents of CPUState and Memory
+{-# LANGUAGE FlexibleInstances #-}
 module Display
     ( showNBytes
     , Display(..)
@@ -8,35 +9,40 @@ module Display
     ) where
 
 import qualified Data.Array.IArray             as IA
+import           Data.Char                      ( toUpper )
+import           Data.Text                      ( Text
+                                                , pack
+                                                )
 import           Data.Word
-import           Numeric                        ( showHex )
+import qualified Numeric
 import           Types
 
 
-showNBytes :: Address -> Offset -> CPUState -> [String]
-showNBytes addr offset CPU {..} =
-    [ showHex i "" <> ": " <> showHex (memory IA.! i) ""
-    | i <- [addr .. (addr + offset)]
-    ]
+showHex :: (Integral a, Show a) => a -> Text
+showHex = (<>) "0x" . pack . map toUpper . flip Numeric.showHex ""
 
-withTab :: String -> String
+showNBytes :: Address -> Offset -> CPUState -> [Text]
+showNBytes addr offset CPU {..} =
+    [ showHex i <> ": " <> showHex (memory IA.! i) | i <- [addr .. (addr + offset)] ]
+
+withTab :: Text -> Text
 withTab str = "\t" <> str
 
-withNewLine :: String -> String
+withNewLine :: Text -> Text
 withNewLine str = str <> "\n"
 
-indentLine :: String -> String
+indentLine :: Text -> Text
 indentLine = withTab . withNewLine
 
 -- | Display is simply a Show instance for the User.
 class Display a where
-  display :: a -> String
+  display :: a -> Text
 
 instance Display Word8 where
-    display val = "0x" <> showHex val ""
+    display = showHex
 
 instance Display Word16 where
-    display val = "0x" <> showHex val ""
+    display = showHex
 
 instance Display Register where
     display (Reg val) = "Reg: " <> display val
@@ -53,32 +59,31 @@ instance Display ProgramCounter where
 instance Display CPUState where
     display cpu =
         "Current CPUState:\n"
-            <> indentLine (display (aReg cpu))
-            <> indentLine (display (xReg cpu))
-            <> indentLine (display (yReg cpu))
+            <> indentLine ("A" <> display (aReg cpu))
+            <> indentLine ("X" <> display (xReg cpu))
+            <> indentLine ("Y" <> display (yReg cpu))
             <> indentLine (display (fReg cpu))
             <> indentLine (display (sp cpu))
             <> indentLine (display (pc cpu))
-
-
 
 instance Display Instruction where
     display (Instruction opc op) =
         "Instruction:\n" <> indentLine (display opc) <> indentLine (display op)
 
 instance Display OpCode where
-    display (OpCode opn addrt) = withNewLine ("OpCode - " <> show opn)
-        <> withTab ("Addressing Type - " <> show addrt)
+    display (OpCode opn addrt) =
+        withNewLine "OpCode - " <> pack (show opn) <> withTab "Addressing Type - " <> pack
+            (show addrt)
 
 instance Display Operand where
-    display (Operand opt storeloc) =
-        withNewLine ("OperandType - " <> display opt)
-            <> withTab ("StoreLocation - " <> display storeloc)
+    display (Operand opt storeloc) = withNewLine ("OperandType - " <> display opt)
+        <> withTab ("StoreLocation - " <> display storeloc)
 
 instance Display OperandType where
     display = \case
         (OpTMemory addr) -> "From Memory Loc: " <> display addr
         (OpTValue  byte) -> "From Value: " <> display byte
+        OpTAccumulator   -> "Accumulator"
         OpTEmpty         -> "No Operand"
 
 instance Display StoreLoc where
@@ -93,5 +98,6 @@ instance Display StoreLoc where
         (ProgramCounterSL addr) -> "Jumping to: " <> display addr
         NoStore                 -> "No Store"
 
-instance Show a => Display [a] where
-    display s = show s
+-- Use of Flexible Instances here
+instance Display Text where
+    display s = s
