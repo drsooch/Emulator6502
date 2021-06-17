@@ -5,6 +5,7 @@ import           DecrementTest
 import           IncrementTest
 import           LoadStoreTest
 import           LogicalTest
+import           ParserTest
 import           ShiftTest
 import           StackTest
 import           StatusFlagTest
@@ -12,31 +13,31 @@ import           System.Directory               ( getCurrentDirectory
                                                 , listDirectory
                                                 , removeFile
                                                 )
---import           System.Environment             ( setEnv )
+import           System.Environment             ( setEnv )
 import           Test.Tasty
 import           TransferTest
 
 main :: IO ()
 main = do
     purgeTempLogs
-    --setEnv "TASTY_QUICKCHECK_VERBOSE" "True"
+ --   setEnv "TASTY_QUICKCHECK_VERBOSE" "True"
     defaultMain tests
 
 tests :: TestTree
-tests = testGroup
-    "Full"
-    [ loadStore
-    , transfer
-    , stackOps
-    , logical
-    , adcCarry
-    , compareOps
-    , increment
-    , decrement
-    , shifts
-    , branches
-    , statusFlags
-    ]
+tests = testGroup "Full"
+    -- [ loadStore
+    -- , transfer
+    -- , stackOps
+    -- , logical
+    -- , adcCarry
+    -- , compareOps
+    -- , increment
+    -- , decrement
+    -- , shifts
+    -- , branches
+    -- , statusFlags
+    --,
+                  [parsing]
 
 purgeTempLogs :: IO ()
 purgeTempLogs = getCurrentDirectory >>= \cwd ->

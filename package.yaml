@@ -16,6 +16,7 @@ description:         Please see the README on GitHub at <https://github.com/drso
 dependencies:
 - base >= 4.7 && < 5
 - array
+- containers
 - directory
 - generic-lens
 - megaparsec

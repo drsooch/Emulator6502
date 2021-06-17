@@ -1,11 +1,11 @@
--- | Display Contents of CPUState and Memory
-{-# LANGUAGE FlexibleInstances #-}
+-- | Display Contents of CPUState, Memory, Registers, StackPointer, and ProgramCounter
+{-# OPTIONS_GHC -O1 #-}  -- removes slowdown on compilation using -O2
 module Display
     ( showNBytes
     , Display(..)
     , withTab
     , withNewLine
-    , indentLine
+    , indentWrapLine
     ) where
 
 import qualified Data.Array.IArray             as IA
@@ -23,7 +23,7 @@ showHex = (<>) "0x" . pack . map toUpper . flip Numeric.showHex ""
 
 showNBytes :: Address -> Offset -> CPUState -> [Text]
 showNBytes addr offset CPU {..} =
-    [ showHex i <> ": " <> showHex (memory IA.! i) | i <- [addr .. (addr + offset)] ]
+    [ display i <> ": " <> display (memory IA.! i) | i <- [addr .. (addr + offset)] ]
 
 withTab :: Text -> Text
 withTab str = "\t" <> str
@@ -31,10 +31,10 @@ withTab str = "\t" <> str
 withNewLine :: Text -> Text
 withNewLine str = str <> "\n"
 
-indentLine :: Text -> Text
-indentLine = withTab . withNewLine
+indentWrapLine :: Text -> Text
+indentWrapLine = withTab . withNewLine
 
--- | Display is simply a Show instance for the User.
+-- | Display is simply a Show instance for Logging.
 class Display a where
   display :: a -> Text
 
@@ -58,17 +58,17 @@ instance Display ProgramCounter where
 
 instance Display CPUState where
     display cpu =
-        "Current CPUState:\n"
-            <> indentLine ("A" <> display (aReg cpu))
-            <> indentLine ("X" <> display (xReg cpu))
-            <> indentLine ("Y" <> display (yReg cpu))
-            <> indentLine (display (fReg cpu))
-            <> indentLine (display (sp cpu))
-            <> indentLine (display (pc cpu))
+        withNewLine "Current CPUState:"
+            <> indentWrapLine ("A" <> display (aReg cpu))
+            <> indentWrapLine ("X" <> display (xReg cpu))
+            <> indentWrapLine ("Y" <> display (yReg cpu))
+            <> indentWrapLine (display (fReg cpu))
+            <> indentWrapLine (display (sp cpu))
+            <> indentWrapLine (display (pc cpu))
 
 instance Display Instruction where
     display (Instruction opc op) =
-        "Instruction:\n" <> indentLine (display opc) <> indentLine (display op)
+        "Instruction:\n" <> indentWrapLine (display opc) <> indentWrapLine (display op)
 
 instance Display OpCode where
     display (OpCode opn addrt) =
@@ -98,6 +98,5 @@ instance Display StoreLoc where
         (ProgramCounterSL addr) -> "Jumping to: " <> display addr
         NoStore                 -> "No Store"
 
--- Use of Flexible Instances here
 instance Display Text where
     display s = s

@@ -80,8 +80,7 @@ type Offset = Word16
 type Memory = UArray Address Byte
 
 -- alias for a Register Lens
-type RegisterName
-    = (LensLike ((,) Register) CPUState CPUState Register Register)
+type RegisterName = (LensLike ((,) Register) CPUState CPUState Register Register)
 
 -- main monad for execution
 type Emulator = StateT CPUState IO
@@ -229,4 +228,4 @@ data OpName
   | BRK
   | NOP
   | RTI -- System Ops
-  deriving (Eq, Show)
+  deriving (Eq, Show, Enum, Bounded)

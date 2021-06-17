@@ -27,9 +27,7 @@ import           Types
 import           Utils
 
 shifts :: TestTree
-shifts = testGroup
-    "Shift Operations"
-    [arithShiftLeft, logicShiftRight, rotateLeft, rotateRight]
+shifts = testGroup "Shift Operations" [arithShiftLeft, logicShiftRight, rotateLeft, rotateRight]
 
 
 {--------------------------------------  ASL Tests --------------------------------------}
@@ -56,19 +54,13 @@ prop_ASL = monadicIO $ do
 
 arithShiftLeftProp :: Byte -> IO Byte
 arithShiftLeftProp toShift = do
-    cpu <-
-        mkTestCPU "ASLQuickCheck"
-        <&> setProgramMemory [0x0A]
-        .   setARegisterTest toShift
+    cpu <- mkTestCPU "ASLQuickCheck" <&> setProgramMemory [0x0A] . setARegisterTest toShift
     (shiftVal, _) <- runEmulatorTest (execute >> getARegister) cpu
     return shiftVal
 
 arithShiftLeftAcc :: TestTree
 arithShiftLeftAcc = testCase "ASL - Accumulator" $ do
-    cpu <-
-        mkTestCPU "ASLAccumulator"
-        <&> setProgramMemory [0x0A]
-        .   setARegisterTest toShift
+    cpu <- mkTestCPU "ASLAccumulator" <&> setProgramMemory [0x0A] . setARegisterTest toShift
     (shiftVal, cpu') <- runEmulatorTest (execute >> getARegister) cpu
     expected @=? shiftVal
     (carryFlag .|. negFlag) @=? fReg cpu'
@@ -79,7 +71,7 @@ arithShiftLeftAcc = testCase "ASL - Accumulator" $ do
 
 arithShiftLeftZeroPage :: TestTree
 arithShiftLeftZeroPage = testCase "ASL - ZeroPage" $ do
-    cpu <- mkTestCPU "ASLZeroPage" <&> setProgramMemory [0x06, toShiftZP]
+    cpu              <- mkTestCPU "ASLZeroPage" <&> setProgramMemory [0x06, toShiftZP]
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral toShiftZP :: Address))
         cpu
@@ -91,10 +83,7 @@ arithShiftLeftZeroPage = testCase "ASL - ZeroPage" $ do
 
 arithShiftLeftZeroPageX :: TestTree
 arithShiftLeftZeroPageX = testCase "ASL - ZeroPage - X" $ do
-    cpu <-
-        mkTestCPU "ASLZeroPageX"
-        <&> setProgramMemory [0x16, zpAddr]
-        .   setXRegisterTest xOffset
+    cpu <- mkTestCPU "ASLZeroPageX" <&> setProgramMemory [0x16, zpAddr] . setXRegisterTest xOffset
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral (zpAddr + xOffset) :: Address))
         cpu
@@ -107,10 +96,8 @@ arithShiftLeftZeroPageX = testCase "ASL - ZeroPage - X" $ do
 
 arithShiftLeftAbsolute :: TestTree
 arithShiftLeftAbsolute = testCase "ASL - Absolute" $ do
-    cpu <-
-        mkTestCPU "ASLAbsolute"
-        <&> setTestMemory shiftAddr [toShift]
-        .   setProgramMemory [0x0E, addrLsb, addrMsb]
+    cpu <- mkTestCPU "ASLAbsolute" <&> setTestMemory shiftAddr [toShift] . setProgramMemory
+        [0x0E, addrLsb, addrMsb]
     (shiftVal, cpu') <- runEmulatorTest (execute >> fetchByte shiftAddr) cpu
     expected @=? shiftVal
     (carryFlag .|. negFlag) @=? fReg cpu'
@@ -165,19 +152,13 @@ prop_LSR = monadicIO $ do
 
 logicShiftRightProp :: Byte -> IO Byte
 logicShiftRightProp toShift = do
-    cpu <-
-        mkTestCPU "LSRQuickCheck"
-        <&> setProgramMemory [0x4A]
-        .   setARegisterTest toShift
+    cpu <- mkTestCPU "LSRQuickCheck" <&> setProgramMemory [0x4A] . setARegisterTest toShift
     (shiftVal, _) <- runEmulatorTest (execute >> getARegister) cpu
     return shiftVal
 
 logicShiftRightAcc :: TestTree
 logicShiftRightAcc = testCase "LSR - Accumulator" $ do
-    cpu <-
-        mkTestCPU "LSRAccumulator"
-        <&> setProgramMemory [0x4A]
-        .   setARegisterTest toShift
+    cpu <- mkTestCPU "LSRAccumulator" <&> setProgramMemory [0x4A] . setARegisterTest toShift
     (shiftVal, cpu') <- runEmulatorTest (execute >> getARegister) cpu
     expected @=? shiftVal
     carryFlag @=? fReg cpu'
@@ -188,7 +169,7 @@ logicShiftRightAcc = testCase "LSR - Accumulator" $ do
 
 logicShiftRightZeroPage :: TestTree
 logicShiftRightZeroPage = testCase "LSR - ZeroPage" $ do
-    cpu <- mkTestCPU "LSRZeroPage" <&> setProgramMemory [0x46, toShiftZP]
+    cpu              <- mkTestCPU "LSRZeroPage" <&> setProgramMemory [0x46, toShiftZP]
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral toShiftZP :: Address))
         cpu
@@ -200,10 +181,7 @@ logicShiftRightZeroPage = testCase "LSR - ZeroPage" $ do
 
 logicShiftRightZeroPageX :: TestTree
 logicShiftRightZeroPageX = testCase "LSR - ZeroPage - X" $ do
-    cpu <-
-        mkTestCPU "LSRZeroPageX"
-        <&> setProgramMemory [0x56, zpAddr]
-        .   setXRegisterTest xOffset
+    cpu <- mkTestCPU "LSRZeroPageX" <&> setProgramMemory [0x56, zpAddr] . setXRegisterTest xOffset
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral (zpAddr + xOffset) :: Address))
         cpu
@@ -216,10 +194,8 @@ logicShiftRightZeroPageX = testCase "LSR - ZeroPage - X" $ do
 
 logicShiftRightAbsolute :: TestTree
 logicShiftRightAbsolute = testCase "LSR - Absolute" $ do
-    cpu <-
-        mkTestCPU "LSRAbsolute"
-        <&> setTestMemory shiftAddr [toShift]
-        .   setProgramMemory [0x4E, addrLsb, addrMsb]
+    cpu <- mkTestCPU "LSRAbsolute" <&> setTestMemory shiftAddr [toShift] . setProgramMemory
+        [0x4E, addrLsb, addrMsb]
     (shiftVal, cpu') <- runEmulatorTest (execute >> fetchByte shiftAddr) cpu
     expected @=? shiftVal
     carryFlag @=? fReg cpu'
@@ -285,10 +261,7 @@ rotateLeftProp toRotate carry = do
 
 rotateLeftAcc :: TestTree
 rotateLeftAcc = testCase "ROL - Accumulator" $ do
-    cpu <-
-        mkTestCPU "ROLAccumulator"
-        <&> setProgramMemory [0x2A]
-        .   setARegisterTest toRotate
+    cpu <- mkTestCPU "ROLAccumulator" <&> setProgramMemory [0x2A] . setARegisterTest toRotate
     (shiftVal, cpu') <- runEmulatorTest (execute >> getARegister) cpu
     expected @=? shiftVal
     (carryFlag .|. negFlag) @=? fReg cpu'
@@ -299,10 +272,7 @@ rotateLeftAcc = testCase "ROL - Accumulator" $ do
 
 rotateLeftZeroPage :: TestTree
 rotateLeftZeroPage = testCase "ROL - ZeroPage" $ do
-    cpu <-
-        mkTestCPU "ROLZeroPage"
-        <&> setProgramMemory [0x26, toRotateZP]
-        .   setFRegisterTest 0x1 -- add carry
+    cpu <- mkTestCPU "ROLZeroPage" <&> setProgramMemory [0x26, toRotateZP] . setFRegisterTest 0x1 -- add carry
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral toRotateZP :: Address))
         cpu
@@ -314,10 +284,7 @@ rotateLeftZeroPage = testCase "ROL - ZeroPage" $ do
 
 rotateLeftZeroPageX :: TestTree
 rotateLeftZeroPageX = testCase "ROL - ZeroPage - X" $ do
-    cpu <-
-        mkTestCPU "ROLZeroPageX"
-        <&> setProgramMemory [0x36, zpAddr]
-        .   setXRegisterTest xOffset
+    cpu <- mkTestCPU "ROLZeroPageX" <&> setProgramMemory [0x36, zpAddr] . setXRegisterTest xOffset
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral (zpAddr + xOffset) :: Address))
         cpu
@@ -415,7 +382,7 @@ rotateRightAcc = testCase "ROR - Accumulator" $ do
 
 rotateRightZeroPage :: TestTree
 rotateRightZeroPage = testCase "ROR - ZeroPage" $ do
-    cpu <- mkTestCPU "RORZeroPage" <&> setProgramMemory [0x66, toRotateZP]
+    cpu              <- mkTestCPU "RORZeroPage" <&> setProgramMemory [0x66, toRotateZP]
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral toRotateZP :: Address))
         cpu
@@ -427,10 +394,7 @@ rotateRightZeroPage = testCase "ROR - ZeroPage" $ do
 
 rotateRightZeroPageX :: TestTree
 rotateRightZeroPageX = testCase "ROR - ZeroPage - X" $ do
-    cpu <-
-        mkTestCPU "RORZeroPageX"
-        <&> setProgramMemory [0x76, zpAddr]
-        .   setXRegisterTest xOffset
+    cpu <- mkTestCPU "RORZeroPageX" <&> setProgramMemory [0x76, zpAddr] . setXRegisterTest xOffset
     (shiftVal, cpu') <- runEmulatorTest
         (execute >> fetchByte (fromIntegral (zpAddr + xOffset) :: Address))
         cpu
@@ -443,10 +407,8 @@ rotateRightZeroPageX = testCase "ROR - ZeroPage - X" $ do
 
 rotateRightAbsolute :: TestTree
 rotateRightAbsolute = testCase "ROR - Absolute" $ do
-    cpu <-
-        mkTestCPU "RORAbsolute"
-        <&> setTestMemory shiftAddr [toRotate]
-        .   setProgramMemory [0x6E, addrLsb, addrMsb]
+    cpu <- mkTestCPU "RORAbsolute" <&> setTestMemory shiftAddr [toRotate] . setProgramMemory
+        [0x6E, addrLsb, addrMsb]
     (shiftVal, cpu') <- runEmulatorTest (execute >> fetchByte shiftAddr) cpu
     expected @=? shiftVal
     carryFlag @=? fReg cpu'
