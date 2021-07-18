@@ -1,128 +1,78 @@
 -- | Parsing Test
 
-{-# OPTIONS_GHC -Wno-orphans #-}
 module ParserTest
     ( parsing
     ) where
 
-import           Assembler.Parser               ( parseAssembly )
+import           Arbitrary                      ( )
+import           Assembler.Parser
 import           Assembler.Types
-import           Assembler.Utils
-import           Control.Monad                  ( replicateM )
-import qualified Data.Text                     as T
-import           Data.Text                      ( Text )
+import           Data.Text                      ( pack )
 import           Test.QuickCheck
 import           Test.Tasty                     ( TestTree
                                                 , testGroup
                                                 )
 import           Test.Tasty.QuickCheck
-import           Text.Megaparsec                ( mkPos )
-import           Text.Megaparsec.Pos            ( SourcePos(..) )
-import           Types                          ( OpName )
+import           Text.Megaparsec                ( eof
+                                                , manyTill
+                                                , runParser
+                                                )
+import           Text.PrettyPrint               ( render )
+import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 parsing :: TestTree
-parsing = testGroup "Parsing" [parsingTest]
+parsing = testGroup
+    "Parsing"
+    [parseDefines, parseCodeBlocks, parseLabeledLocs, parseProgramLoc, parseProgramFull]
 
-parsingTest :: TestTree
-parsingTest = testProperty "Parser" prop_parse
+parseDefines :: TestTree
+parseDefines = testProperty "Defines" definesTest
 
-prop_parse :: [AsmStatement] -> Property
-prop_parse stmts = case parseAssembly "QuickCheck Parser" (renderStatements stmts) of
-    Left  _      -> property False
-    Right result -> stmts === result
+parseCodeBlocks :: TestTree
+parseCodeBlocks = testProperty "Code Blocks" codeBlocksTest
 
-genVarName :: Gen Text
-genVarName = sized $ \n -> T.pack <$> replicateM n validSymbols
+parseLabeledLocs :: TestTree
+parseLabeledLocs = testProperty "Labeled Locations" labeledLocsTest
+
+parseProgramLoc :: TestTree
+parseProgramLoc = testProperty "Program Location" programLocTest
+
+parseProgramFull :: TestTree
+parseProgramFull = testProperty "Full Program" programFullTest
+
+programFullTest :: [VarDefinition] -> [CodeBlock] -> [LabeledLocation] -> Property
+programFullTest defs code memloc =
+    not (null defs)
+        ==> not (null code)
+        ==> not (null memloc)
+        ==> either failcase check
+        $   parseAssembly
+                "Full Program Parser"
+                (renderStatements defs <> renderStatements code <> renderStatements memloc)
   where
-    validSymbols = frequency [(26, choose ('a', 'z')), (26, choose ('A', 'Z')), (1, pure '_')]
+    failcase _ = property False
+    check AsmTree {..} = defs === definitions .&&. code === codeBlocks .&&. memloc === labeledLocs
 
-genLabel :: Gen Text
-genLabel = sized $ \n -> T.pack <$> replicateM n validSymbols
-    where validSymbols = frequency [(26, choose ('a', 'z')), (26, choose ('A', 'Z'))]
+definesTest :: [VarDefinition] -> Property
+definesTest stmts =
+    case runParser (manyTill pDefineVar eof) "Define Variable Parser" (renderStatements stmts) of
+        Left  _      -> property False
+        Right result -> stmts === result
 
-genOpName :: Gen OpName
-genOpName = chooseEnum (minBound, maxBound)
+codeBlocksTest :: [CodeBlock] -> Property
+codeBlocksTest stmts =
+    case runParser (manyTill pCodeBlockTest eof) "Code Block Parser" (renderStatements stmts) of
+        Left  _      -> property False
+        Right result -> stmts === result
 
-genRandomText :: Gen Text
-genRandomText = sized $ \n -> T.pack . escapeChars <$> replicateM n arbitraryASCIIChar
+labeledLocsTest :: [LabeledLocation] -> Property
+labeledLocsTest stmts =
+    case runParser pLabeledLocations "Labeled Location Parser" (renderStatements stmts) of
+        Left  _      -> property False
+        Right result -> stmts === result
 
-genNumLiteral :: Gen AsmNumeric
-genNumLiteral = oneof [genHexLiteral, genDecimalLiteral, genBinaryLiteral]
-
-genHexLiteral :: Gen AsmNumeric
-genHexLiteral = HexLiteral <$> arbitrary
-
--- need this and genHexByte to please QuickCheck, our PrettyPrinter
--- outputs the same text for AsmZeroPage and AsmAbsolute
--- despite having two different meanings
-genHexAddress :: Gen AsmNumeric
-genHexAddress = HexLiteral <$> choose (256, maxBound)
-
-genHexByte :: Gen AsmNumeric
-genHexByte = HexLiteral <$> choose (0, 255)
-
-genDecimalLiteral :: Gen AsmNumeric
-genDecimalLiteral = DecimalLiteral <$> arbitrary
-
-genBinaryLiteral :: Gen AsmNumeric
-genBinaryLiteral = BinaryLiteral <$> arbitrary
-
-genNumImmediate :: Gen AsmNumeric
-genNumImmediate = oneof [genHexImmediate, genDecImmediate, genBinImmediate]
-
-genDecImmediate :: Gen AsmNumeric
-genDecImmediate = DecimalImmediate <$> arbitrary
-
-genHexImmediate :: Gen AsmNumeric
-genHexImmediate = HexImmediate <$> arbitrary
-
-genBinImmediate :: Gen AsmNumeric
-genBinImmediate = BinaryImmediate <$> arbitrary
-
-instance Arbitrary SourcePos where
-    arbitrary = pure SourcePos { sourceName = "", sourceLine = mkPos 1, sourceColumn = mkPos 1 }
-
-instance Arbitrary AsmStatement where
-    arbitrary = oneof
-        [ StmtDirective <$> arbitrary <*> arbitrary
-        , StmtCodeLabel <$> genLabel <*> arbitrary
-        , StmtLabelLocation <$> genLabel <*> arbitrary <*> arbitrary
-        , StmtDefineVar <$> genVarName <*> genNumLiteral <*> arbitrary
-        , StmtProgramLocation <$> genHexLiteral <*> arbitrary
-        , StmtOpCode <$> genOpName <*> arbitrary <*> arbitrary
-        ]
-
-instance Arbitrary AsmDirectiveType where
-    arbitrary = oneof
-        [ DtByte <$> listOf genNumLiteral
-        , DtDByte <$> listOf genNumLiteral
-        , DtWord <$> listOf genNumLiteral
-        , DtBlock <$> genDecimalLiteral
-        , DtText <$> genRandomText
-        , pure DtEnd
-        ]
-
-instance Arbitrary AsmNumeric where
-    arbitrary = oneof
-        [ genHexLiteral
-        , genDecimalLiteral
-        , genBinaryLiteral
-        , genDecImmediate
-        , genHexImmediate
-        , genBinImmediate
-        ]
-
--- ignore AsmA as the only time we need it is in AsmAddressType
-instance Arbitrary AsmRegisterName where
-    arbitrary = oneof $ map pure [AsmX, AsmY]
-
-instance Arbitrary AsmAddressType where
-    arbitrary = oneof
-        [ AsmImmediate <$> genNumImmediate
-        , AsmZeroPage <$> genHexByte <*> arbitrary
-        , AsmAbsolute <$> genHexAddress <*> arbitrary
-        , AsmIndirect <$> genHexLiteral <*> arbitrary
-        , AsmRelative <$> choose (-128, 127)
-        , pure AsmAccumulator
-        , pure AsmImplicit
-        ]
+programLocTest :: ProgramLocation -> Property
+programLocTest stmts =
+    case runParser pProgramLocation "Labeled Location Parser" (pack $ render $ pPrint stmts) of
+        Left  _      -> property False
+        Right result -> stmts === result

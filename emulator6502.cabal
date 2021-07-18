@@ -25,7 +25,10 @@ source-repository head
 
 library
   exposed-modules:
+      Assembler.Analyze
       Assembler.Assemble
+      Assembler.CodeGen
+      Assembler.Error
       Assembler.Parser
       Assembler.Types
       Assembler.Utils
@@ -46,8 +49,10 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      DuplicateRecordFields
       RecordWildCards
       LambdaCase
+      BlockArguments
       DerivingStrategies
       GeneralizedNewtypeDeriving
       DerivingVia
@@ -58,7 +63,6 @@ library
       DataKinds
       AllowAmbiguousTypes
       MultiWayIf
-      StrictData
   build-depends:
       array
     , base >=4.7 && <5
@@ -81,8 +85,10 @@ executable emulator6502-exe
   hs-source-dirs:
       app
   default-extensions:
+      DuplicateRecordFields
       RecordWildCards
       LambdaCase
+      BlockArguments
       DerivingStrategies
       GeneralizedNewtypeDeriving
       DerivingVia
@@ -93,7 +99,6 @@ executable emulator6502-exe
       DataKinds
       AllowAmbiguousTypes
       MultiWayIf
-      StrictData
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       array
@@ -116,6 +121,8 @@ test-suite emulator6502-test
   main-is: Test.hs
   other-modules:
       ADCTest
+      AnalyzeTest
+      Arbitrary
       BranchTest
       CompareTest
       DecrementTest
@@ -133,8 +140,10 @@ test-suite emulator6502-test
   hs-source-dirs:
       test
   default-extensions:
+      DuplicateRecordFields
       RecordWildCards
       LambdaCase
+      BlockArguments
       DerivingStrategies
       GeneralizedNewtypeDeriving
       DerivingVia
@@ -145,7 +154,6 @@ test-suite emulator6502-test
       DataKinds
       AllowAmbiguousTypes
       MultiWayIf
-      StrictData
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

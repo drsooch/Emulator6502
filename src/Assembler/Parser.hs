@@ -1,29 +1,40 @@
--- |
+-- | Parser for a Subset of 6502 Assembler
 
 module Assembler.Parser
     ( parseFile
     , parseAssembly
+    , pDefineVar
+    , pCodeBlocks
+    , pCodeBlockTest
+    , pLabeledLocations
+    , pProgramLocation
+    , AsmTree(..)
     ) where
 
+import           Assembler.Error
 import           Assembler.Types
 import           Assembler.Utils
+import           Data.Bifunctor                 ( first )
 import           Data.Char                      ( isAlpha )
 import           Data.Functor                   ( ($>)
                                                 , (<&>)
                                                 )
 import           Data.Text                      ( Text
                                                 , pack
+                                                , uncons
                                                 )
 import qualified Data.Text.IO                  as TIO
 import           Data.Void                      ( Void )
+import qualified Text.Megaparsec               as M
 import           Text.Megaparsec                ( (<?>)
+                                                , (<|>)
                                                 , Parsec
                                                 , between
                                                 , choice
                                                 , empty
                                                 , eof
                                                 , getSourcePos
-                                                , label
+                                                , lookAhead
                                                 , manyTill
                                                 , optional
                                                 , runParser
@@ -34,22 +45,37 @@ import           Text.Megaparsec                ( (<?>)
 import qualified Text.Megaparsec.Char          as C
 import qualified Text.Megaparsec.Char.Lexer    as L
 import           Text.Megaparsec.Debug          ( dbg )
-import           Text.Megaparsec.Error          ( ParseErrorBundle )
 import           Types                          ( OpName(..) )
 
 type AssemblerParser a = Parsec Void Text a
-type ParserError = ParseErrorBundle Text Void
 
-parseFile :: String -> IO (Either ParserError [AsmStatement])
+parseFile :: String -> IO (Either AssemblyError AsmTree)
 parseFile filepath = TIO.readFile filepath <&> parseAssembly filepath
 
 -- clear whitespace from the start
-parseAssembly :: String -> Text -> Either ParserError [AsmStatement]
-parseAssembly = runParser (whiteSpace *> manyTill asmStatement eof)
+parseAssembly :: String -> Text -> Either AssemblyError AsmTree
+parseAssembly file input = case uncons input of
+    Nothing -> Left $ InternalError "Empty Input"
+    _       -> first ParseError $ runParser
+        (   whiteSpace
+        >>  AsmTree
+        <$> optional pProgramLocation
+        <*> pDefinitions
+        <*> pCodeBlocks
+        <*> pLabeledLocations
+        )
+        file
+        input
 
-asmStatement :: AssemblerParser AsmStatement
-asmStatement =
-    dbg "AsmStatement" $ choice [pDirective, try pDefineVar, try pLabel, pProgramLocation, pOpCode]
+
+pDefinitions :: AssemblerParser [VarDefinition]
+pDefinitions = manyTill pDefineVar (try $ lookAhead pCodeBlocks)
+
+pCodeBlocks :: AssemblerParser [CodeBlock]
+pCodeBlocks = manyTill pCodeBlock (try $ lookAhead pLabeledLocation)
+
+pLabeledLocations :: AssemblerParser [LabeledLocation]
+pLabeledLocations = manyTill pLabeledLocation eof
 
 whiteSpace :: AssemblerParser ()
 whiteSpace = L.space C.space1 (L.skipLineComment ";") empty
@@ -171,43 +197,36 @@ pDTText = dbg "DTTEXT" (DtText <$ stringConstant "TEXT" <*> stringLiteral <* end
 pDTEnd :: AssemblerParser AsmDirectiveType
 pDTEnd = dbg "DTEND" (DtEnd <$ C.string' "END" <* endOfLine)
 
-pDirective' :: AssemblerParser AsmDirectiveType
-pDirective' = dbg
+pDirective :: AssemblerParser AsmDirectiveType
+pDirective = dbg
     "Directives"
     (   directiveStart
     >>  choice [pDTByte, pDTDByte, pDTWord, pDTBlock, pDTText, pDTEnd]
     <?> "Directive Type"
     )
 
-pDirective :: AssemblerParser AsmStatement
-pDirective = dbg "Directive w/ SourcePos" $ lexeme $ StmtDirective <$> pDirective' <*> getSourcePos
-
 {---------------------- Labels -----------------------}
-pLabel' :: AssemblerParser Text
-pLabel' = dbg "Label Name" $ takeWhile1P (Just "Label Name") isAlpha <* colon
+pLabel :: AssemblerParser Text
+pLabel = dbg "Label Name" $ takeWhile1P (Just "Label Name") isAlpha <* colon
 
-pLabeledLocation :: AssemblerParser AsmStatement
+pLabeledLocation :: AssemblerParser LabeledLocation
 pLabeledLocation =
     dbg "Labeled Location"
-        $   label "Labeled Location"
-        $   StmtLabelLocation
-        <$> pLabel'
-        <*> pDirective'
+        $   M.label "Labeled Location"
+        $   LabeledLoc
+        <$> pLabel
+        <*> pDirective
         <*> getSourcePos
 
-pCodeLabel :: AssemblerParser AsmStatement
-pCodeLabel =
-    dbg "Code Label" $ label "Code Label" $ StmtCodeLabel <$> pLabel' <* endOfLine <*> getSourcePos
-
-pLabel :: AssemblerParser AsmStatement
-pLabel = lexeme $ choice [try pLabeledLocation, pCodeLabel]
+pCodeLabel :: AssemblerParser Text
+pCodeLabel = dbg "Code Label" $ lexeme $ M.label "Code Label" $ pLabel <* endOfLine
 
 {---------------------- Defines -----------------------}
-pDefineVar :: AssemblerParser AsmStatement
+pDefineVar :: AssemblerParser VarDefinition
 pDefineVar =
     dbg "Define Variable"
         $   lexeme
-        $   StmtDefineVar
+        $   VarDefinition
         <$> (stringConstant "define" >> variableString <* whiteSpace)
         <*> pNumericLiteral
         <*> getSourcePos
@@ -232,7 +251,7 @@ pImmediateAddress :: AssemblerParser AsmAddressType
 pImmediateAddress = dbg "Immediate Address" $ AsmImmediate <$> pNumericImmediate <* endOfLine
 
 pZeroPageOrAbsolute :: AssemblerParser AsmAddressType
-pZeroPageOrAbsolute = dbg "Zero Page Or Absolute" $ label "ZeroPage or Absolute Address" $ do
+pZeroPageOrAbsolute = dbg "Zero Page Or Absolute" $ M.label "ZeroPage or Absolute Address" $ do
     hl@(HexLiteral val) <- pHexLiteral
     addrReg             <- optional (comma >> pAddressRegister)
     _                   <- endOfLine
@@ -254,19 +273,19 @@ pIndirectY =
         <*  endOfLine
 
 pIndirectAddress :: AssemblerParser AsmAddressType
-pIndirectAddress = dbg "Indirect Address" $ label "Indirect Address" $ choice
+pIndirectAddress = dbg "Indirect Address" $ M.label "Indirect Address" $ choice
     [try pIndirectX, try pIndirectY, pIndirect]
 
 pRelative :: AssemblerParser AsmAddressType
 pRelative =
     dbg "Relative address"
-        $   label "Relative Address"
+        $   M.label "Relative Address"
         $   AsmRelative
         <$> (progCountIdent >> offset)
         <*  endOfLine
 
 pAddressLabel :: AssemblerParser AsmAddressType
-pAddressLabel = dbg "Address Label" $ label "Address w/ Label or Variable" $ choice
+pAddressLabel = dbg "Address Label" $ M.label "Address w/ Label or Variable" $ choice
     [immediateIdent *> (AsmUnknownImm <$> variableString), AsmUnknown <$> variableString]
 
 
@@ -275,27 +294,47 @@ pAddressType = dbg "Address Type" $ choice
     [ C.newline $> AsmImplicit
     , pZeroPageOrAbsolute
     , pIndirectAddress
-    , pImmediateAddress
+    , try pImmediateAddress
     , pRelative
     , try pAccumAddress
     , pAddressLabel
     ]
 
-{---------------------- OpCodes -----------------------}
-pOpCode :: AssemblerParser AsmStatement
-pOpCode = dbg "pOpCode" $ lexeme $ StmtOpCode <$> pOpCode' <*> pAddressType <*> getSourcePos
+{---------------------- Code Blocks -----------------------}
+
+pCodeBlock :: AssemblerParser CodeBlock
+pCodeBlock =
+    dbg "Code Block"
+        $   M.label "Code Block"
+        $   lexeme
+        $   CodeBlock 0
+        <$> pCodeLabel
+        <*> pCodeStatements
+
+pCodeStatements :: AssemblerParser [CodeStatement]
+pCodeStatements = M.label "Code Statements" $ manyTill pCodeStatement (try $ lookAhead pLabel)
+
+pCodeStatement :: AssemblerParser CodeStatement
+pCodeStatement =
+    dbg "Code Statment" $ lexeme $ CodeStatement <$> pOpCode' <*> pAddressType <*> getSourcePos
 
 pOpCode' :: AssemblerParser OpName
-pOpCode' = dbg "OpCode" $ choice $ map
-    (\opn -> lexemeNoNewLine (opn <$ C.string' (pack $ show opn)))
+pOpCode' = dbg "Op Code" $ choice $ map
+    (\opn -> (opn <$ C.string' (pack $ show opn)) <* whiteSpaceNoNewLine)
     [minBound .. maxBound]
 
+pCodeBlockTest :: AssemblerParser CodeBlock
+pCodeBlockTest = lexeme $ CodeBlock 0 <$> pCodeLabel <*> pCodeStatementsTest
+
+pCodeStatementsTest :: AssemblerParser [CodeStatement]
+pCodeStatementsTest = manyTill pCodeStatement (eof <|> (try (lookAhead pLabel) $> ()))
+
 {---------------------- Program Location -----------------------}
-pProgramLocation :: AssemblerParser AsmStatement
+pProgramLocation :: AssemblerParser ProgramLocation
 pProgramLocation =
     dbg "Program Location"
-        $   label "Program Location"
+        $   M.label "Program Location"
         $   lexeme
-        $   StmtProgramLocation
+        $   ProgramLoc
         <$> (progCountIdent >> equals >> pHexLiteral)
         <*> getSourcePos

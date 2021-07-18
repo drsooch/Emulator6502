@@ -1,22 +1,38 @@
 -- | Types for Parsing and Assembling
 module Assembler.Types
     ( AsmStatement(..)
-    , AsmRegisterName(..)
-    , AsmDirectiveType(..)
-    , AsmNumeric(..)
+    , ProgramLocation(..)
+    , CodeBlock(..)
+    , CodeStatement(..)
+    , LabeledLocation(..)
+    , VarDefinition(..)
+    , Bindings(..)
     , AsmAddressType(..)
-    , AssemblyError(..)
+    , AsmDirectiveType(..)
+    , AsmRegisterName(..)
+    , AsmNumeric(..)
+    , AsmState(..)
+    , AssemblyExe(..)
+    , AsmTree(..)
+    , ByteType(..)
+    , Assembler
+    , Variables
+    , CodeLabels
+    , MemLocations
     , renderStatements
     ) where
 
+import           Control.Monad.State.Strict     ( State )
 import           Data.Char                      ( intToDigit
                                                 , toUpper
                                                 )
+import           Data.Map.Strict                ( Map )
 import           Data.Text                      ( Text
                                                 , pack
                                                 , unpack
                                                 )
 import           Data.Word                      ( Word16 )
+import           GHC.Generics                   ( Generic )
 import           Numeric                        ( showHex
                                                 , showInt
                                                 , showIntAtBase
@@ -29,7 +45,6 @@ import           Text.PrettyPrint               ( (<+>)
                                                 , comma
                                                 , doubleQuotes
                                                 , empty
-                                                , equals
                                                 , hcat
                                                 , parens
                                                 , punctuate
@@ -38,33 +53,73 @@ import           Text.PrettyPrint               ( (<+>)
                                                 , text
                                                 )
 import           Text.PrettyPrint.HughesPJClass ( Pretty(pPrint) )
-import           Types                          ( OpName )
+import           Types
 
-data AssemblyError = InvalidInstruction Text
-                   | InvalidLabel Text
-                   | InvalidVariable Text
-                   | DuplicateLabel Text
-                   | DuplicateVariable Text
-                   deriving (Show)
+-- "AST" for file
+data AsmTree = AsmTree
+    { progStartIdent :: Maybe ProgramLocation
+    , definitions    :: [VarDefinition]
+    , codeBlocks     :: [CodeBlock]
+    , labeledLocs    :: [LabeledLocation]
+    }
+    deriving (Show, Generic)
 
-data AsmStatement = StmtDirective AsmDirectiveType SourcePos
-                  | StmtCodeLabel Text SourcePos
-                  | StmtLabelLocation Text AsmDirectiveType SourcePos
-                  | StmtDefineVar Text AsmNumeric SourcePos
-                  | StmtProgramLocation AsmNumeric SourcePos
-                  | StmtOpCode OpName AsmAddressType SourcePos
-                  deriving (Show)
+data AsmStatement = StmtCodeBlock CodeBlock
+                  | StmtLabeledLocation LabeledLocation
+                  | StmtDefineVar VarDefinition
+                  | StmtProgramLocation ProgramLocation
+                  deriving (Show, Eq)
 
-instance Eq AsmStatement where
-    (StmtDirective dType1 _) == (StmtDirective dType2 _) = dType1 == dType2
-    (StmtCodeLabel label1 _) == (StmtCodeLabel label2 _) = label1 == label2
-    (StmtLabelLocation label1 dType1 _) == (StmtLabelLocation label2 dType2 _) =
-        label1 == label2 && dType1 == dType2
-    (StmtDefineVar var1 num1 _ ) == (StmtDefineVar var2 num2 _ ) = var1 == var2 && num1 == num2
-    (StmtProgramLocation num1 _) == (StmtProgramLocation num2 _) = num1 == num2
-    (StmtOpCode opn1 addrT1 _  ) == (StmtOpCode opn2 addrT2 _  ) = opn1 == opn2 && addrT1 == addrT2
-    _                            == _                            = False
+data ProgramLocation = ProgramLoc
+    { location  :: AsmNumeric
+    , sourcePos :: SourcePos
+    }
+    deriving Show
 
+instance Eq ProgramLocation where
+    ProgramLoc l1 _ == ProgramLoc l2 _ = l1 == l2
+
+data CodeBlock = CodeBlock
+    { progOffset :: Int
+    , label      :: Text
+    , statements :: [CodeStatement]
+    }
+    deriving Show
+
+instance Eq CodeBlock where
+    CodeBlock _ l1 b1 == CodeBlock _ l2 b2 = l1 == l2 && b1 == b2
+
+data CodeStatement = CodeStatement
+    { opName      :: OpName
+    , addressType :: AsmAddressType
+    , sourcePos   :: SourcePos
+    }
+
+instance Eq CodeStatement where
+    CodeStatement opn1 addr1 _ == CodeStatement opn2 addr2 _ = opn1 == opn2 && addr1 == addr2
+
+instance Show CodeStatement where
+    show (CodeStatement opn addrT _) = "CodeStatement " <> show opn <> " " <> show addrT
+
+data LabeledLocation = LabeledLoc
+    { label      :: Text
+    , directType :: AsmDirectiveType
+    , sourcePos  :: SourcePos
+    }
+    deriving Show
+
+instance Eq LabeledLocation where
+    LabeledLoc l1 d1 _ == LabeledLoc l2 d2 _ = l1 == l2 && d1 == d2
+
+data VarDefinition = VarDefinition
+    { label     :: Text
+    , value     :: AsmNumeric
+    , sourcePos :: SourcePos
+    }
+    deriving Show
+
+instance Eq VarDefinition where
+    VarDefinition l1 v1 _ == VarDefinition l2 v2 _ = l1 == l2 && v1 == v2
 
 data AsmRegisterName = AsmA
                      | AsmX
@@ -132,20 +187,29 @@ hexIdent = char '$'
 binIdent = char '%'
 programCounter = char '*'
 
-renderStatements :: [AsmStatement] -> Text
+renderStatements :: Pretty a => [a] -> Text
 renderStatements = pack . render . hcat . map pPrint
 
 instance Pretty AsmStatement where
-    pPrint (StmtDirective dType _) = pPrint dType <> newline
-    pPrint (StmtCodeLabel label _) = textToDoc label <> colon <> newline
-    pPrint (StmtLabelLocation label dType _) =
-        (textToDoc label <> colon) <+> (pPrint dType <> newline)
-    pPrint (StmtDefineVar label val _) =
-        text "define" <+> textToDoc label <+> pPrint val <+> newline
-    pPrint (StmtProgramLocation val _) = (programCounter <> equals) <+> pPrint val <+> newline
-    -- don't ask
-    pPrint (StmtOpCode opname AsmImplicit _) = indent <> (opNameToDoc opname <+> newline)
-    pPrint (StmtOpCode opname val _) = indent <> (opNameToDoc opname <+> pPrint val <+> newline)
+    pPrint (StmtCodeBlock       codeBlock ) = pPrint codeBlock
+    pPrint (StmtLabeledLocation labeledLoc) = pPrint labeledLoc
+    pPrint (StmtDefineVar       defineVar ) = pPrint defineVar
+    pPrint (StmtProgramLocation progLoc   ) = pPrint progLoc
+
+instance Pretty CodeBlock where
+    pPrint CodeBlock {..} = textToDoc label <> colon <> newline <> hcat (map pPrint statements)
+
+instance Pretty CodeStatement where
+    pPrint CodeStatement {..} = indent <> (opNameToDoc opName <+> pPrint addressType) <> newline
+
+instance Pretty LabeledLocation where
+    pPrint LabeledLoc {..} = ((textToDoc label <> colon) <+> pPrint directType) <> newline
+
+instance Pretty VarDefinition where
+    pPrint VarDefinition {..} = text "define" <+> textToDoc label <+> pPrint value <+> newline
+
+instance Pretty ProgramLocation where
+    pPrint ProgramLoc {..} = text "*=" <+> pPrint location <+> newline
 
 instance Pretty AsmDirectiveType where
     pPrint (DtByte  val) = indent <> (text ".BYTE" <+> listAsmNumericToDoc val)
@@ -182,3 +246,43 @@ instance Pretty AsmRegisterName where
     pPrint AsmA = text "A"
     pPrint AsmX = text "X"
     pPrint AsmY = text "Y"
+
+
+{----------------------- Analysis and CodeGen ------------------------}
+-- Map Defined Vars to their Value
+type Variables = Map Text AsmNumeric
+-- Map Labeled Memory Locations to a size in the data section
+-- (Memory Offset, Size of Memory)
+type MemLocations = Map Text (Int, Int)
+-- Map Code Label to an Address (unintialized to start)
+type CodeLabels = Map Text Address
+
+type Assembler a = State AsmState a
+
+data AsmState = AsmState
+    { codeOffset :: Int
+    , dataOffset :: Int
+    , asmTree    :: AsmTree
+    , bindings   :: Bindings
+    }
+    deriving Generic
+
+data Bindings = Bindings
+    { variables   :: Variables
+    , codeLabels  :: CodeLabels
+    , labeledLocs :: MemLocations
+    }
+    deriving (Show, Generic)
+
+data AssemblyExe = Executable
+    { dataBytes :: [ByteType]    -- "Data" section
+    , codeBytes :: [ByteType]    -- "Code" section
+    , progStart :: Maybe Address  -- Where to load the code
+    }
+    deriving Show
+
+
+data ByteType = Literal Byte
+              | Label Text
+              | Offset Int [Byte]
+              deriving (Show)

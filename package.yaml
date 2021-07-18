@@ -28,8 +28,10 @@ dependencies:
 - unix
 
 default-extensions:
+- DuplicateRecordFields
 - RecordWildCards
 - LambdaCase
+- BlockArguments
 - DerivingStrategies
 - GeneralizedNewtypeDeriving
 - DerivingVia
@@ -40,7 +42,6 @@ default-extensions:
 - DataKinds
 - AllowAmbiguousTypes
 - MultiWayIf
-- StrictData
 
 library:
   source-dirs: src

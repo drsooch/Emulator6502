@@ -1,4 +1,5 @@
 import           ADCTest
+import           AnalyzeTest
 import           BranchTest
 import           CompareTest
 import           DecrementTest
@@ -13,31 +14,37 @@ import           System.Directory               ( getCurrentDirectory
                                                 , listDirectory
                                                 , removeFile
                                                 )
-import           System.Environment             ( setEnv )
+import           System.Environment             ( getArgs
+                                                , setEnv
+                                                )
 import           Test.Tasty
 import           TransferTest
 
 main :: IO ()
 main = do
+    setEnv "TASTY_QUICKCHECK_VERBOSE" "True"
     purgeTempLogs
- --   setEnv "TASTY_QUICKCHECK_VERBOSE" "True"
-    defaultMain tests
+    getArgs >>= \case
+        ["full"] -> defaultMain fullSuite
+        _        -> defaultMain analysis
 
-tests :: TestTree
-tests = testGroup "Full"
-    -- [ loadStore
-    -- , transfer
-    -- , stackOps
-    -- , logical
-    -- , adcCarry
-    -- , compareOps
-    -- , increment
-    -- , decrement
-    -- , shifts
-    -- , branches
-    -- , statusFlags
-    --,
-                  [parsing]
+fullSuite :: TestTree
+fullSuite = testGroup
+    "Full Test Suite"
+    [ loadStore
+    , transfer
+    , stackOps
+    , logical
+    , adcCarry
+    , compareOps
+    , increment
+    , decrement
+    , shifts
+    , branches
+    , statusFlags
+    , parsing
+    , analysis
+    ]
 
 purgeTempLogs :: IO ()
 purgeTempLogs = getCurrentDirectory >>= \cwd ->
