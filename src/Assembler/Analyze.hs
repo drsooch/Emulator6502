@@ -54,9 +54,9 @@ captureDefines :: [VarDefinition] -> BindingsEnv Variables
 captureDefines = foldlM capture M.empty
   where
     capture :: Variables -> VarDefinition -> BindingsEnv Variables
-    capture vars (VarDefinition label val _)
-        | label `M.member` vars = throwError $ DuplicateVariable label
-        | otherwise             = checkGlobalLabels label val vars
+    capture vars VarDefinition {..}
+        | varName `M.member` vars = throwError $ DuplicateVariable varName
+        | otherwise               = checkGlobalLabels varName value vars
 
 -- capture any code labels and check to make sure we have valid instructions
 -- label resolution occurs in CodeGen
@@ -65,21 +65,23 @@ captureLabels = foldlM capture M.empty
   where
     capture :: CodeLabels -> CodeBlock -> BindingsEnv CodeLabels
     capture codeLabels CodeBlock {..}
-        | label `M.member` codeLabels = throwError $ DuplicateLabel label
-        | otherwise = foldlM validateStatement () statements >> checkGlobalLabels label 0 codeLabels
+        | blockLabel `M.member` codeLabels
+        = throwError $ DuplicateLabel blockLabel
+        | otherwise
+        = foldlM validateStatement () statements >> checkGlobalLabels blockLabel 0 codeLabels
 
 -- construct a table of sizes/offsets of labeled locations
 captureLabeledLoc :: [LabeledLocation] -> BindingsEnv MemLocations
 captureLabeledLoc stmts =
-    fst <$> foldM (\stmt -> validateLabeledLoc stmt >> capture stmt) (M.empty, 0) stmts
+    fst <$> foldM (\acc stmt -> validateLabeledLoc acc stmt >> capture acc stmt) (M.empty, 0) stmts
   where
     capture :: (MemLocations, Int) -> LabeledLocation -> BindingsEnv (MemLocations, Int)
     capture (labeledLocs, offset) LabeledLoc {..}
-        | label `M.member` labeledLocs
-        = throwError $ DuplicateLabel label
+        | locLabel `M.member` labeledLocs
+        = throwError $ DuplicateLabel locLabel
         | otherwise
         = let size = sizeOfLocation directType
-          in  (, size) <$> checkGlobalLabels label (offset, size) labeledLocs
+          in  (, size) <$> checkGlobalLabels locLabel (offset, size) labeledLocs
 
 sizeOfLocation :: AsmDirectiveType -> Int
 sizeOfLocation = \case

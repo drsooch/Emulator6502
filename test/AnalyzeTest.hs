@@ -15,6 +15,7 @@ import           Test.Tasty                     ( TestTree
                                                 , testGroup
                                                 )
 import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck
 import           Types
 
 analysis :: TestTree
@@ -34,22 +35,20 @@ mkAsmTree :: AsmTree
 mkAsmTree =
     AsmTree { progStartIdent = Nothing, definitions = [], codeBlocks = [], labeledLocs = [] }
 
+
 validAnalysisTest :: TestTree
 validAnalysisTest = testCase
-    "Analyzing a Passing Case"
-    case
-        analyzeStatements
-            (mkAsmTree
-                { definitions = [ VarDefinition "foo" (HexLiteral 4)       undefined
-                                , VarDefinition "bar" (DecimalImmediate 7) undefined
-                                ]
-                , codeBlocks  = [CodeBlock 0 "baz" []]
-                , labeledLocs = [LabeledLoc "fizz" (DtText "buzz") undefined]
-                }
-            )
-    of
+    "Valid Analysis"
+    case analyzeStatements (AsmTree Nothing varDs cbs lls) of
         Left  err  -> assertFailure $ "Expecting a passing analysis got: " <> show err
-        Right _res -> assertFailure "fail"
+        Right _res -> do
+            undefined
+  where
+    varD1 = undefined
+    varDs = [varD1, varD2]
+    cbs   = [cb1, cb2, cb3, cb4]
+    lls   = []
+
 
 -- realistically we fail on empty input
 -- but better safe than sorry
@@ -143,7 +142,7 @@ invalidDirectiveSizeTest = testCase
             )
     of
         Left err -> InvalidDirectiveSize badStatement @=? err
-        r        -> putStrLn (show r) >> pure ()-- assertFailure "Expected Invalid Directive Size"
+        _        -> assertFailure "Expected Invalid Directive Size"
     where badStatement = LabeledLoc "buzz" (DtByte []) undefined
 
 invalidDirectiveSizeTest' :: TestTree

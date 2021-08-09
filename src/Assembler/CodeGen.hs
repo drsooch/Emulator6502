@@ -41,7 +41,7 @@ codeBlockSize = do
 
 codeBlockSize' :: CodeLabels -> [CodeBlock] -> CodeLabels
 codeBlockSize' =
-    foldl' (\binds' CodeBlock {..} -> M.insert label (codeStatementSize statements) binds')
+    foldl' (\binds' CodeBlock {..} -> M.insert blockLabel (codeStatementSize statements) binds')
 
 codeStatementSize :: [CodeStatement] -> Word16
 codeStatementSize =

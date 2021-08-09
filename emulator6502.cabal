@@ -31,6 +31,10 @@ library
       Assembler.Error
       Assembler.Parser
       Assembler.Types
+      Assembler.Types.ASMState
+      Assembler.Types.ASMStatement
+      Assembler.Types.ASMTree
+      Assembler.Types.Pretty
       Assembler.Utils
       Decode
       Display
