@@ -18,7 +18,7 @@ import           Text.Megaparsec.Error          ( ParseErrorBundle
 
 type ParserError = ParseErrorBundle Text Void
 
-data AssemblyError = InvalidOpCodeAddressType CodeStatement
+data AssemblyError = InvalidOpCodeAddressType AsmInstruction
                    | InvalidDirectiveSize LabeledLocation
                    | InvalidVariable Text AsmStatement
                    | DuplicateLabel Text

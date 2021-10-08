@@ -7,6 +7,10 @@ module ParserTest
 import           Arbitrary                      ( )
 import           Assembler.Parser
 import           Assembler.Types
+import           Assembler.Types.Pretty         ( pPrint
+                                                , render
+                                                , renderStatements
+                                                )
 import           Data.Text                      ( pack )
 import           Test.QuickCheck
 import           Test.Tasty                     ( TestTree
@@ -17,8 +21,6 @@ import           Text.Megaparsec                ( eof
                                                 , manyTill
                                                 , runParser
                                                 )
-import           Text.PrettyPrint               ( render )
-import           Text.PrettyPrint.HughesPJClass ( pPrint )
 
 parsing :: TestTree
 parsing = testGroup
@@ -48,10 +50,17 @@ programFullTest defs code memloc =
         ==> either failcase check
         $   parseAssembly
                 "Full Program Parser"
-                (renderStatements defs <> renderStatements code <> renderStatements memloc)
+                (  renderStatements defs
+                <> codePragma
+                <> renderStatements code
+                <> dataPragma
+                <> renderStatements memloc
+                )
   where
     failcase _ = property False
     check AsmTree {..} = defs === definitions .&&. code === codeBlocks .&&. memloc === labeledLocs
+    codePragma = ".CODE\n"
+    dataPragma = ".DATA\n"
 
 definesTest :: [VarDefinition] -> Property
 definesTest stmts =
@@ -73,6 +82,6 @@ labeledLocsTest stmts =
 
 programLocTest :: ProgramLocation -> Property
 programLocTest stmts =
-    case runParser pProgramLocation "Labeled Location Parser" (pack $ render $ pPrint stmts) of
+    case runParser pProgramLocation "Program Location Parser" (pack $ render $ pPrint stmts) of
         Left  _      -> property False
         Right result -> stmts === result

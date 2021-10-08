@@ -41,11 +41,14 @@ codeBlockSize = do
 
 codeBlockSize' :: CodeLabels -> [CodeBlock] -> CodeLabels
 codeBlockSize' =
-    foldl' (\binds' CodeBlock {..} -> M.insert blockLabel (codeStatementSize statements) binds')
+    foldl' (\binds' CodeBlock {..} -> M.insert blockLabel (statementSize statements) binds')
 
-codeStatementSize :: [CodeStatement] -> Word16
-codeStatementSize =
-    getSum . foldMap (\CodeStatement {..} -> Sum $ 1 + addressTypeToSize addressType)
+statementSize :: [CodeStatement] -> Word16
+statementSize = getSum . foldMap sumInstructions
+  where
+    sumInstructions (InstructionStatement AsmInstruction {..}) =
+        pure $ 1 + addressTypeToSize addressType
+    sumInstructions _ = pure 0
 
 -- convert an address type to number of bytes to encode
 addressTypeToSize :: AsmAddressType -> Word16

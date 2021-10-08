@@ -12,8 +12,8 @@ import           Assembler.Types.ASMStatement   ( CodeBlock
 import           GHC.Generics                   ( Generic )
 
 data AsmTree = AsmTree
-    { progStartIdent :: Maybe ProgramLocation
-    , definitions    :: [VarDefinition]
+    { definitions    :: [VarDefinition]
+    , progStartIdent :: Maybe ProgramLocation
     , codeBlocks     :: [CodeBlock]
     , labeledLocs    :: [LabeledLocation]
     }

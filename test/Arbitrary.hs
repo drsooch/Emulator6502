@@ -79,7 +79,10 @@ instance Arbitrary CodeBlock where
     arbitrary = CodeBlock 0 <$> genLabel <*> arbitrary
 
 instance Arbitrary CodeStatement where
-    arbitrary = CodeStatement <$> genOpName <*> arbitrary <*> arbitrary
+    arbitrary = oneof [InstructionStatement <$> arbitrary, ProgramLocStatement <$> arbitrary]
+
+instance Arbitrary AsmInstruction where
+    arbitrary = AsmInstruction <$> genOpName <*> arbitrary <*> arbitrary
 
 instance Arbitrary LabeledLocation where
     arbitrary = LabeledLoc <$> genLabel <*> arbitrary <*> arbitrary

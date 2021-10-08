@@ -68,7 +68,7 @@ captureLabels = foldlM capture M.empty
         | blockLabel `M.member` codeLabels
         = throwError $ DuplicateLabel blockLabel
         | otherwise
-        = foldlM validateStatement () statements >> checkGlobalLabels blockLabel 0 codeLabels
+        = foldlM validateCodeStatement () statements >> checkGlobalLabels blockLabel 0 codeLabels
 
 -- construct a table of sizes/offsets of labeled locations
 captureLabeledLoc :: [LabeledLocation] -> BindingsEnv MemLocations
@@ -93,9 +93,11 @@ sizeOfLocation = \case
     DtEnd            -> 0
 
 -- validate opcodes
-validateStatement :: a -> CodeStatement -> BindingsEnv a
-validateStatement acc op@CodeStatement {..} | isValidAddressType opName addressType = pure acc
-                                            | otherwise = throwError $ InvalidOpCodeAddressType op
+validateCodeStatement :: a -> CodeStatement -> BindingsEnv a
+validateCodeStatement acc (ProgramLocStatement _) = pure acc
+validateCodeStatement acc (InstructionStatement op@AsmInstruction {..})
+    | isValidAddressType opName addressType = pure acc
+    | otherwise                             = throwError $ InvalidOpCodeAddressType op
 
 -- validate labeled location size
 validateLabeledLoc :: a -> LabeledLocation -> BindingsEnv a

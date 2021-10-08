@@ -16,6 +16,7 @@ import           Test.Tasty                     ( TestTree
                                                 )
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck
+import           Text.Megaparsec.Pos            ( pos1 )
 import           Types
 
 analysis :: TestTree
@@ -39,15 +40,20 @@ mkAsmTree =
 validAnalysisTest :: TestTree
 validAnalysisTest = testCase
     "Valid Analysis"
-    case analyzeStatements (AsmTree Nothing varDs cbs lls) of
+    case analyzeStatements (AsmTree varDs Nothing [cbs] lls) of
         Left  err  -> assertFailure $ "Expecting a passing analysis got: " <> show err
-        Right _res -> do
-            undefined
+        Right _res -> pure ()
   where
-    varD1 = undefined
+    varD1 = VarDefinition "var1" (HexImmediate 46) undefined
+    varD2 = VarDefinition "var2" (HexImmediate 12) undefined
     varDs = [varD1, varD2]
-    cbs   = [cb1, cb2, cb3, cb4]
-    lls   = []
+    cb1   = InstructionStatement (AsmInstruction ADC (AsmImmediate (HexImmediate 12)) undefined)
+    cb2   = InstructionStatement (AsmInstruction ADC (AsmImmediate (HexImmediate 12)) undefined)
+    cb3   = InstructionStatement (AsmInstruction ADC (AsmImmediate (HexImmediate 12)) undefined)
+    cb4   = InstructionStatement (AsmInstruction ADC (AsmImmediate (HexImmediate 12)) undefined)
+    cbs   = CodeBlock 0 "block1" [cb1, cb2, cb3, cb4]
+    ll1   = LabeledLoc "ll1" (DtByte [HexLiteral 12]) undefined
+    lls   = [ll1]
 
 
 -- realistically we fail on empty input
@@ -116,20 +122,22 @@ invalidOpCodeAddressTypeTest = testCase
     case
         analyzeStatements
             (mkAsmTree
-                { codeBlocks =
-                    [ CodeBlock
-                          0
-                          "foo"
-                          [ CodeStatement LDA (AsmZeroPage (HexLiteral 1) Nothing) undefined
-                          , badStatement
-                          ]
-                    ]
+                { codeBlocks = [ CodeBlock
+                                     0
+                                     "foo"
+                                     [ InstructionStatement $ AsmInstruction
+                                         LDA
+                                         (AsmZeroPage (HexLiteral 1) Nothing)
+                                         undefined
+                                     , InstructionStatement badStatement
+                                     ]
+                               ]
                 }
             )
     of
         Left err -> InvalidOpCodeAddressType badStatement @=? err
         _        -> assertFailure "Expected Invalid OpCode Address Type"
-    where badStatement = CodeStatement BIT (AsmImmediate (HexLiteral 1)) undefined
+    where badStatement = AsmInstruction BIT (AsmImmediate (HexLiteral 1)) undefined
 
 invalidDirectiveSizeTest :: TestTree
 invalidDirectiveSizeTest = testCase

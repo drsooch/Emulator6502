@@ -5,6 +5,7 @@ module Assembler.Types.ASMStatement
     , ProgramLocation(..)
     , CodeBlock(..)
     , CodeStatement(..)
+    , AsmInstruction(..)
     , LabeledLocation(..)
     , VarDefinition(..)
     , AsmRegisterName(..)
@@ -44,17 +45,25 @@ data CodeBlock = CodeBlock
 instance Eq CodeBlock where
     CodeBlock _ l1 b1 == CodeBlock _ l2 b2 = l1 == l2 && b1 == b2
 
-data CodeStatement = CodeStatement
+data CodeStatement = InstructionStatement AsmInstruction
+                   | ProgramLocStatement ProgramLocation
+                   deriving Eq
+
+instance Show CodeStatement where
+    show (InstructionStatement inst) = show inst
+    show (ProgramLocStatement  pl  ) = show pl
+
+data AsmInstruction = AsmInstruction
     { opName      :: OpName
     , addressType :: AsmAddressType
     , sourcePos   :: SourcePos
     }
 
-instance Eq CodeStatement where
-    CodeStatement opn1 addr1 _ == CodeStatement opn2 addr2 _ = opn1 == opn2 && addr1 == addr2
+instance Eq AsmInstruction where
+    AsmInstruction opn1 addr1 _ == AsmInstruction opn2 addr2 _ = opn1 == opn2 && addr1 == addr2
 
-instance Show CodeStatement where
-    show (CodeStatement opn addrT _) = "CodeStatement " <> show opn <> " " <> show addrT
+instance Show AsmInstruction where
+    show (AsmInstruction opn addrT _) = "AsmInstruction " <> show opn <> " " <> show addrT
 
 data LabeledLocation = LabeledLoc
     { locLabel   :: Text
@@ -123,16 +132,20 @@ instance Pretty CodeBlock where
         textToDoc blockLabel <> colon <> newline <> hcat (map pPrint statements)
 
 instance Pretty CodeStatement where
-    pPrint CodeStatement {..} = indent <> (opNameToDoc opName <+> pPrint addressType) <> newline
+    pPrint (InstructionStatement inst) = pPrint inst
+    pPrint (ProgramLocStatement  pl  ) = pPrint pl
+
+instance Pretty ProgramLocation where
+    pPrint ProgramLoc {..} = text "*=" <+> pPrint location <+> newline
+
+instance Pretty AsmInstruction where
+    pPrint AsmInstruction {..} = indent <> (opNameToDoc opName <+> pPrint addressType) <> newline
 
 instance Pretty LabeledLocation where
     pPrint LabeledLoc {..} = ((textToDoc locLabel <> colon) <+> pPrint directType) <> newline
 
 instance Pretty VarDefinition where
     pPrint VarDefinition {..} = text "define" <+> textToDoc varName <+> pPrint value <+> newline
-
-instance Pretty ProgramLocation where
-    pPrint ProgramLoc {..} = text "*=" <+> pPrint location <+> newline
 
 instance Pretty AsmDirectiveType where
     pPrint (DtByte  val) = indent <> (text ".BYTE" <+> listToDoc val)
@@ -149,6 +162,7 @@ instance Pretty AsmNumeric where
     pPrint (BinaryLiteral    val) = binIdent <> binNumToDoc val
     pPrint (DecimalLiteral   val) = decNumToDoc val
     pPrint (HexLiteral       val) = hexIdent <> hexNumToDoc val
+
 
 instance Pretty AsmAddressType where
     pPrint (AsmImmediate val           ) = pPrint val

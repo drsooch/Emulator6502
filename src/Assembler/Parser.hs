@@ -59,8 +59,8 @@ parseAssembly file input = case uncons input of
     _       -> first ParseError $ runParser
         (   whiteSpace
         >>  AsmTree
-        <$> optional pProgramLocation
-        <*> pDefinitions
+        <$> pDefinitions
+        <*> optional pProgramLocation
         <*> pCodeBlocks
         <*> pLabeledLocations
         )
@@ -68,15 +68,18 @@ parseAssembly file input = case uncons input of
         input
 
 
+{---------------------- Top Level Parsers ----------------------}
 pDefinitions :: AssemblerParser [VarDefinition]
-pDefinitions = manyTill pDefineVar (try $ lookAhead pCodeBlocks)
+pDefinitions =
+    manyTill pDefineVar (choice [try codePragma, try $ lookAhead pProgramLocation $> ()])
 
 pCodeBlocks :: AssemblerParser [CodeBlock]
-pCodeBlocks = manyTill pCodeBlock (try $ lookAhead pLabeledLocation)
+pCodeBlocks = manyTill pCodeBlock (try dataPragma)
 
 pLabeledLocations :: AssemblerParser [LabeledLocation]
 pLabeledLocations = manyTill pLabeledLocation eof
 
+{---------------------- Utility Parsers ----------------------}
 whiteSpace :: AssemblerParser ()
 whiteSpace = L.space C.space1 (L.skipLineComment ";") empty
 
@@ -138,6 +141,12 @@ stringLiteral =
 variableString :: AssemblerParser Text
 variableString =
     dbg "Variable String" $ takeWhile1P (Just "Define Variable") (\c -> isAlpha c || c == '_')
+
+codePragma :: AssemblerParser ()
+codePragma = dbg "Code Pragma" (lexeme $ C.string' ".CODE") $> ()
+
+dataPragma :: AssemblerParser ()
+dataPragma = dbg "Data Pragma" (lexeme $ C.string' ".DATA") $> ()
 
 {---------------------- NUMERICS -----------------------}
 offset :: AssemblerParser Int
@@ -312,11 +321,22 @@ pCodeBlock =
         <*> pCodeStatements
 
 pCodeStatements :: AssemblerParser [CodeStatement]
-pCodeStatements = M.label "Code Statements" $ manyTill pCodeStatement (try $ lookAhead pLabel)
+pCodeStatements = M.label "Code CodeStatements" $ manyTill
+    pCodeStatement
+    (choice [try (lookAhead pLabel $> ()), try $ lookAhead dataPragma])
 
 pCodeStatement :: AssemblerParser CodeStatement
-pCodeStatement =
-    dbg "Code Statment" $ lexeme $ CodeStatement <$> pOpCode' <*> pAddressType <*> getSourcePos
+pCodeStatement = dbg "Code Statment" $ choice
+    [InstructionStatement <$> pInstructionStatement, ProgramLocStatement <$> pProgramLocation]
+
+pInstructionStatement :: AssemblerParser AsmInstruction
+pInstructionStatement =
+    dbg "Instruction Statement"
+        $   lexeme
+        $   AsmInstruction
+        <$> pOpCode'
+        <*> pAddressType
+        <*> getSourcePos
 
 pOpCode' :: AssemblerParser OpName
 pOpCode' = dbg "Op Code" $ choice $ map
