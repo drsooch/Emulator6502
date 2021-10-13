@@ -1,9 +1,8 @@
--- | Analyze a AsmTree
-
 {-# LANGUAGE TupleSections #-}
+
+-- | Analyze a AsmTree
 module Assembler.Analyze
     ( analyzeStatements
-    , validateLabeledLoc
     ) where
 
 import           Assembler.Error
@@ -25,13 +24,15 @@ import           Data.Map                       ( Map )
 import qualified Data.Map.Strict               as M
 import           Data.Set                       ( Set )
 import qualified Data.Set                      as S
-import qualified Data.Text                     as T
 import           Data.Text                      ( Text )
+import qualified Data.Text                     as T
 import           Types
 
-type BindingsEnv a = ReaderT (Set Text) (Except AssemblyError) a
+type BindingsEnv a = ReaderT Namespace (Except AnalysisError) a
 
-analyzeStatements :: AsmTree -> Either AssemblyError Bindings
+type Namespace = Set Text
+
+analyzeStatements :: AsmTree -> Either AnalysisError Bindings
 analyzeStatements tree = runExcept (runReaderT (analyzeStatements' tree) S.empty)
 
 -- Scrape definitions, code blocks and labeled memory for all possible Labels
@@ -43,45 +44,44 @@ analyzeStatements' AsmTree {..} = do
     pure $ Bindings defs cLabels locLabels
     where toSet = S.fromList . M.keys
 
--- Check the global environment for duplicate labels
-checkGlobalLabels :: Text -> c -> Map Text c -> BindingsEnv (Map Text c)
-checkGlobalLabels label val vars = ask >>= \defined -> if label `S.member` defined
-    then throwError $ DuplicateLabel label
-    else pure $ M.insert label val vars
+-- combine accumulated bindings with global bindings
+withGlobal :: Map Text a -> BindingsEnv Namespace
+withGlobal locals = ask >>= \global -> pure (toSet locals `S.union` global)
+    where toSet m = S.fromList $ M.keys m
 
--- capture the defining statements
+checkDuplicate :: Map Text a -> Text -> BindingsEnv ()
+checkDuplicate locals name = withGlobal locals >>= \defined ->
+    if name `S.member` defined then throwError $ DuplicateBinding name else pure ()
+
+-- capture the defining statements as a Map from Text (Variable Name) -> AsmNumeric (Value)
 captureDefines :: [VarDefinition] -> BindingsEnv Variables
 captureDefines = foldlM capture M.empty
   where
     capture :: Variables -> VarDefinition -> BindingsEnv Variables
-    capture vars VarDefinition {..}
-        | varName `M.member` vars = throwError $ DuplicateVariable varName
-        | otherwise               = checkGlobalLabels varName value vars
+    capture vars VarDefinition {..} =
+        checkDuplicate vars varName >> pure (M.insert varName value vars)
 
 -- capture any code labels and check to make sure we have valid instructions
 -- label resolution occurs in CodeGen
+-- Constructs Map of Text (Block Label) -> Int (Program Offset)
 captureLabels :: [CodeBlock] -> BindingsEnv CodeLabels
 captureLabels = foldlM capture M.empty
   where
     capture :: CodeLabels -> CodeBlock -> BindingsEnv CodeLabels
-    capture codeLabels CodeBlock {..}
-        | blockLabel `M.member` codeLabels
-        = throwError $ DuplicateLabel blockLabel
-        | otherwise
-        = foldlM validateCodeStatement () statements >> checkGlobalLabels blockLabel 0 codeLabels
+    capture codeLabels CodeBlock {..} =
+        checkDuplicate codeLabels blockLabel >> foldlM validateCodeStatement () statements >> pure
+            (M.insert blockLabel 0 codeLabels)
 
 -- construct a table of sizes/offsets of labeled locations
+-- Map of Text (Location Label) -> (Int, Int) (Memory Offset, Memory Size)
 captureLabeledLoc :: [LabeledLocation] -> BindingsEnv MemLocations
 captureLabeledLoc stmts =
     fst <$> foldM (\acc stmt -> validateLabeledLoc acc stmt >> capture acc stmt) (M.empty, 0) stmts
   where
     capture :: (MemLocations, Int) -> LabeledLocation -> BindingsEnv (MemLocations, Int)
-    capture (labeledLocs, offset) LabeledLoc {..}
-        | locLabel `M.member` labeledLocs
-        = throwError $ DuplicateLabel locLabel
-        | otherwise
-        = let size = sizeOfLocation directType
-          in  (, size) <$> checkGlobalLabels locLabel (offset, size) labeledLocs
+    capture (labeledLocs, offset) LabeledLoc {..} = checkDuplicate labeledLocs locLabel
+        >> pure (M.insert locLabel (offset, size) labeledLocs, size)
+        where size = sizeOfLocation directType
 
 sizeOfLocation :: AsmDirectiveType -> Int
 sizeOfLocation = \case

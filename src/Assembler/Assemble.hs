@@ -15,7 +15,7 @@ assemble = undefined <$> mkAsmState
 
 -- Make our starting Assembler State
 -- will make one pass to analyze the statements for validaty and label/variable capture
-mkAsmState :: AsmTree -> Either AssemblyError AsmState
+mkAsmState :: AsmTree -> Either AnalysisError AsmState
 mkAsmState tree = AsmState 0 0 tree <$> analyzeStatements tree
 
 -- Emit the actual bytes for the executable

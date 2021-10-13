@@ -1,13 +1,13 @@
 cradle:
-  cabal:
-    - path: "src"
-      component: "lib:emulator6502"
+  stack:
+    - path: "./src"
+      component: "emulator6502:lib"
 
-    - path: "app/Main.hs"
+    - path: "./app/Main.hs"
       component: "emulator6502:exe:emulator6502-exe"
 
-    - path: "app/Paths_emulator6502.hs"
+    - path: "./app/Paths_emulator6502.hs"
       component: "emulator6502:exe:emulator6502-exe"
 
-    - path: "test"
+    - path: "./test"
       component: "emulator6502:test:emulator6502-test"

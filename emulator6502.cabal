@@ -124,22 +124,24 @@ test-suite emulator6502-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
-      ADCTest
       AnalyzeTest
-      Arbitrary
-      BranchTest
-      CompareTest
-      DecrementTest
-      IncrementTest
-      LoadStoreTest
-      LogicalTest
-      ParserTest
-      SBCTest
-      ShiftTest
-      StackTest
-      StatusFlagTest
+      Assembler.AnalyzeTest
+      Test.ADCTest
+      Test.Arbitrary
+      Test.BranchTest
+      Test.CompareTest
+      Test.DecrementTest
+      Test.IncrementTest
+      Test.LoadStoreTest
+      Test.LogicalTest
+      Test.ParserTest
+      Test.SBCTest
+      Test.ShiftTest
+      Test.StackTest
+      Test.StatusFlagTest
+      Test.TestUtils
+      Test.TransferTest
       TestUtils
-      TransferTest
       Paths_emulator6502
   hs-source-dirs:
       test

@@ -1,7 +1,7 @@
--- | Arbitrary Instances for Testing
-
 {-# OPTIONS_GHC -Wno-orphans #-}
-module Arbitrary where
+
+-- | Arbitrary Instances for Testing
+module Test.Arbitrary where
 
 import           Assembler.Types
 import           Assembler.Utils

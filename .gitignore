@@ -6,3 +6,6 @@ log/*
 .projectile
 
 stan.*
+.vscode/*
+hie.yaml
+parser.log

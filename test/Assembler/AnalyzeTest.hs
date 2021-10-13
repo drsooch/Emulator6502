@@ -1,5 +1,5 @@
 -- | Testing the Analysis Phase of Assembling
-module Test.Assembler.AnalyzeTest
+module AnalyzeTest
     ( analysis
     ) where
 

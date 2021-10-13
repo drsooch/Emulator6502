@@ -1,5 +1,5 @@
 -- | Utility functions that span all tests
-module Test.TestUtils where
+module TestUtils where
 
 import           Assembler.Types
 import           Control.Monad.State.Strict     ( runStateT )
