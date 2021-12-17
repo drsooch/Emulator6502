@@ -1,9 +1,9 @@
 -- | Testing the Analysis Phase of Assembling
-module AnalyzeTest
+module Test.Assembler.AnalyzeTest
     ( analysis
     ) where
 
-import           Arbitrary                      ( )
+import           Test.Arbitrary                      ( )
 import           Assembler.Analyze
 import           Assembler.Error
 import           Assembler.Types

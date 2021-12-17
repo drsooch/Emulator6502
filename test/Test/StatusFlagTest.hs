@@ -1,6 +1,6 @@
 -- | Status Flag Operations
 
-module StatusFlagTest
+module Test.StatusFlagTest
     ( statusFlags
     ) where
 

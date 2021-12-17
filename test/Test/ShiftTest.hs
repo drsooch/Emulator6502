@@ -1,6 +1,6 @@
 -- | Shift Operation Testing
 
-module ShiftTest
+module Test.ShiftTest
     ( shifts
     ) where
 

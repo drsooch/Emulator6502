@@ -1,6 +1,6 @@
 -- | Testing Stack Operations and Overflow/Underflow
 
-module StackTest
+module Test.StackTest
     ( stackOps
     ) where
 

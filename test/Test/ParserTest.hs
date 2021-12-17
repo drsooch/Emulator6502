@@ -1,10 +1,10 @@
 -- | Parsing Test
 
-module ParserTest
+module Test.ParserTest
     ( parsing
     ) where
 
-import           Arbitrary                      ( )
+import           Test.Arbitrary                      ( )
 import           Assembler.Parser
 import           Assembler.Types
 import           Assembler.Types.Pretty         ( pPrint

@@ -1,6 +1,6 @@
 -- | Increment Operations Testing
 
-module IncrementTest
+module Test.IncrementTest
     ( increment
     ) where
 

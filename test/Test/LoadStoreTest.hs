@@ -1,4 +1,4 @@
-module LoadStoreTest
+module Test.LoadStoreTest
     ( loadStore
     ) where
 

@@ -1,6 +1,6 @@
 -- | Testing ADC with additional OVERFLOW and CARRY tests
 
-module SBCTest
+module Test.SBCTest
     ( sbcCarry
     , subber
     , sbcOverflow

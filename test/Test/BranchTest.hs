@@ -13,7 +13,7 @@ import           Test.Tasty                     ( TestTree
 import           Test.Tasty.HUnit               ( (@=?)
                                                 , testCase
                                                 )
-import           Test.TestUtils
+import           TestUtils
 import           Types
 
 branches :: TestTree

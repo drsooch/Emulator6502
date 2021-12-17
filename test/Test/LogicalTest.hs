@@ -1,6 +1,6 @@
 -- | Logical Operations Testing
 
-module LogicalTest
+module Test.LogicalTest
     ( logical
     ) where
 

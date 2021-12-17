@@ -1,15 +1,15 @@
-import           ADCTest
-import           AnalyzeTest
-import           BranchTest
-import           CompareTest
-import           DecrementTest
-import           IncrementTest
-import           LoadStoreTest
-import           LogicalTest
-import           ParserTest
-import           ShiftTest
-import           StackTest
-import           StatusFlagTest
+import          Test.ADCTest
+import          Test.Assembler.AnalyzeTest
+import          Test.BranchTest
+import          Test.CompareTest
+import          Test.DecrementTest
+import          Test.IncrementTest
+import          Test.LoadStoreTest
+import          Test.LogicalTest
+import          Test.ParserTest
+import          Test.ShiftTest
+import          Test.StackTest
+import          Test.StatusFlagTest
 import           System.Directory               ( getCurrentDirectory
                                                 , listDirectory
                                                 , removeFile
@@ -18,15 +18,15 @@ import           System.Environment             ( getArgs
                                                 , setEnv
                                                 )
 import           Test.Tasty
-import           TransferTest
+import           Test.TransferTest
 
 main :: IO ()
 main = do
-    setEnv "TASTY_QUICKCHECK_VERBOSE" "True"
+    setEnv "TASTY_QUICKCHECK_VERBOSE" "False"
     purgeTempLogs
     getArgs >>= \case
         ["full"] -> defaultMain fullSuite
-        _        -> defaultMain analysis
+        _        -> defaultMain fullSuite
 
 fullSuite :: TestTree
 fullSuite = testGroup

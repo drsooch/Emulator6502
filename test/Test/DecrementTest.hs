@@ -1,6 +1,6 @@
 -- | Decrement Operations Testing
 
-module DecrementTest
+module Test.DecrementTest
     ( decrement
     ) where
 

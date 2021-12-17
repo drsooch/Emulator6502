@@ -1,6 +1,6 @@
 -- | TAX, TAY, TXA, TYA
 
-module TransferTest
+module Test.TransferTest
     ( transfer
     ) where
 

@@ -1,6 +1,6 @@
 -- | Comparison Operations
 
-module CompareTest
+module Test.CompareTest
     ( compareOps
     ) where
 

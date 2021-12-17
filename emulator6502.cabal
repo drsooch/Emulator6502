@@ -124,10 +124,9 @@ test-suite emulator6502-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
-      AnalyzeTest
-      Assembler.AnalyzeTest
       Test.ADCTest
       Test.Arbitrary
+      Test.Assembler.AnalyzeTest
       Test.BranchTest
       Test.CompareTest
       Test.DecrementTest
@@ -139,7 +138,6 @@ test-suite emulator6502-test
       Test.ShiftTest
       Test.StackTest
       Test.StatusFlagTest
-      Test.TestUtils
       Test.TransferTest
       TestUtils
       Paths_emulator6502
